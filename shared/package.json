@@ -1,0 +1,29 @@
+{
+  "name": "@sharklearning/shared",
+  "version": "1.0.0",
+  "description": "Shared utilities and libraries for SharkLearning microservices",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "dependencies": {
+    "winston": "^3.11.0",
+    "redis": "^4.6.10",
+    "joi": "^17.9.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "eslint": "^8.55.0"
+  },
+  "keywords": [
+    "microservices",
+    "shared",
+    "utilities",
+    "logging",
+    "events"
+  ],
+  "author": "SharkLearning Team",
+  "license": "UNLICENSED"
+} 

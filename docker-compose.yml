@@ -1,16 +1,44 @@
 services:
-  # Database Services
-  postgres:
+  # Database Services - Separate databases for each service
+  postgres-user:
     image: postgres:15
     environment:
-      POSTGRES_DB: sharklearning
+      POSTGRES_DB: user_service_db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secure_postgres_password_2024}
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - postgres_user_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-user-service.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - sharklearning-network
+
+  postgres-content:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: content_service_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secure_postgres_password_2024}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_content_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-content-service.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - sharklearning-network
+
+  postgres-progress:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: progress_service_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secure_postgres_password_2024}
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_progress_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-progress-service.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - sharklearning-network
 
@@ -30,11 +58,9 @@ services:
       - "8000:8000"
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-secure_postgres_password_2024}@postgres:5432/sharklearning
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET:-default_jwt_secret_for_development_only}
     depends_on:
-      - postgres
       - redis
     volumes:
       - ./services/api-gateway:/app
@@ -51,11 +77,11 @@ services:
       - "8001:8000"
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-secure_postgres_password_2024}@postgres:5432/sharklearning
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-secure_postgres_password_2024}@postgres-user:5432/user_service_db
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET:-default_jwt_secret_for_development_only}
     depends_on:
-      - postgres
+      - postgres-user
       - redis
     volumes:
       - ./services/user-service:/app
@@ -72,11 +98,11 @@ services:
       - "8002:8000"
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-secure_postgres_password_2024}@postgres:5432/sharklearning
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-secure_postgres_password_2024}@postgres-content:5432/content_service_db
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET:-default_jwt_secret_for_development_only}
     depends_on:
-      - postgres
+      - postgres-content
       - redis
     volumes:
       - ./services/content-service:/app
@@ -93,11 +119,11 @@ services:
       - "8003:8000"
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-secure_postgres_password_2024}@postgres:5432/sharklearning
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-secure_postgres_password_2024}@postgres-progress:5432/progress_service_db
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET:-default_jwt_secret_for_development_only}
     depends_on:
-      - postgres
+      - postgres-progress
       - redis
     volumes:
       - ./services/progress-service:/app
@@ -119,7 +145,9 @@ services:
       - sharklearning-network
 
 volumes:
-  postgres_data:
+  postgres_user_data:
+  postgres_content_data:
+  postgres_progress_data:
 
 networks:
   sharklearning-network:
