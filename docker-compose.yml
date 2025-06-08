@@ -1,0 +1,126 @@
+services:
+  # Database Services
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: sharklearning
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secure_postgres_password_2024}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - sharklearning-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - sharklearning-network
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-secure_postgres_password_2024}@postgres:5432/sharklearning
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET:-default_jwt_secret_for_development_only}
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./services/api-gateway:/app
+      - /app/node_modules
+    networks:
+      - sharklearning-network
+
+  # User Service
+  user-service:
+    build:
+      context: ./services/user-service
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-secure_postgres_password_2024}@postgres:5432/sharklearning
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET:-default_jwt_secret_for_development_only}
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./services/user-service:/app
+      - /app/node_modules
+    networks:
+      - sharklearning-network
+
+  # Content Service
+  content-service:
+    build:
+      context: ./services/content-service
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-secure_postgres_password_2024}@postgres:5432/sharklearning
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET:-default_jwt_secret_for_development_only}
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./services/content-service:/app
+      - /app/node_modules
+    networks:
+      - sharklearning-network
+
+  # Progress Service
+  progress-service:
+    build:
+      context: ./services/progress-service
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-secure_postgres_password_2024}@postgres:5432/sharklearning
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET:-default_jwt_secret_for_development_only}
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./services/progress-service:/app
+      - /app/node_modules
+    networks:
+      - sharklearning-network
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=http://localhost:8000
+    networks:
+      - sharklearning-network
+
+volumes:
+  postgres_data:
+
+networks:
+  sharklearning-network:
+    driver: bridge 
