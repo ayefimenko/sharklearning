@@ -10,30 +10,64 @@ const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({});
   const navigate = useNavigate();
   const { login } = useAuthStore();
 
+  const validateForm = () => {
+    const errors: {[key: string]: string} = {};
+    
+    if (!formData.email.trim()) {
+      errors.email = 'Email is required';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      errors.email = 'Please enter a valid email';
+    }
+    
+    if (!formData.password.trim()) {
+      errors.password = 'Password is required';
+    }
+    
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const validateField = (name: string, value: string) => {
+    const errors = { ...validationErrors };
+    
+    if (name === 'email') {
+      if (!value.trim()) {
+        errors.email = 'Email is required';
+      } else if (!/\S+@\S+\.\S+/.test(value)) {
+        errors.email = 'Please enter a valid email';
+      } else {
+        delete errors.email;
+      }
+    }
+    
+    if (name === 'password') {
+      if (!value.trim()) {
+        errors.password = 'Password is required';
+      } else {
+        delete errors.password;
+      }
+    }
+    
+    setValidationErrors(errors);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!validateForm()) {
+      return;
+    }
+    
     setIsLoading(true);
     setError('');
+    setValidationErrors({});
     
     try {
-      const response = await fetch('/api/users/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Login failed');
-      }
-
-      const data = await response.json();
-      login(data.token, data.user);
+      await login(formData.email, formData.password);
       navigate('/dashboard');
     } catch (error) {
       console.error('Login failed:', error);
@@ -44,10 +78,14 @@ const Login: React.FC = () => {
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [e.target.name]: e.target.value
+      [name]: value
     }));
+    
+    // Real-time validation
+    validateField(name, value);
   };
 
   return (
@@ -74,11 +112,11 @@ const Login: React.FC = () => {
         {/* Login Card */}
         <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 p-8 transform hover:scale-[1.02] transition-all duration-300">
           <div className="mb-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Sign in</h2>
-            <p className="text-gray-600">Continue your learning adventure</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome Back</h2>
+            <p className="text-gray-600">Sign in to continue your learning journey</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} noValidate className="space-y-6">
             {/* Error Message */}
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center">
@@ -91,7 +129,7 @@ const Login: React.FC = () => {
 
             {/* Email Input */}
             <div className="group">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
                 Email Address
               </label>
               <div className="relative">
@@ -101,20 +139,26 @@ const Login: React.FC = () => {
                   </svg>
                 </div>
                 <input
+                  id="email"
                   type="email"
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
                   required
-                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 bg-gray-50/50 focus:bg-white"
+                  className={`w-full pl-10 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 bg-gray-50/50 focus:bg-white ${
+                    validationErrors.email ? 'border-red-300' : 'border-gray-200'
+                  }`}
                   placeholder="Enter your email"
                 />
               </div>
+              {validationErrors.email && (
+                <p className="mt-1 text-sm text-red-600">{validationErrors.email}</p>
+              )}
             </div>
 
             {/* Password Input */}
             <div className="group">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
                 Password
               </label>
               <div className="relative">
@@ -124,17 +168,21 @@ const Login: React.FC = () => {
                   </svg>
                 </div>
                 <input
+                  id="password"
                   type={showPassword ? 'text' : 'password'}
                   name="password"
                   value={formData.password}
                   onChange={handleChange}
                   required
-                  className="w-full pl-10 pr-12 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 bg-gray-50/50 focus:bg-white"
+                  className={`w-full pl-10 pr-12 py-3 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 bg-gray-50/50 focus:bg-white ${
+                    validationErrors.password ? 'border-red-300' : 'border-gray-200'
+                  }`}
                   placeholder="Enter your password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
+                  aria-label="Toggle password visibility"
                   className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-purple-500 transition-colors"
                 >
                   {showPassword ? (
@@ -149,6 +197,9 @@ const Login: React.FC = () => {
                   )}
                 </button>
               </div>
+              {validationErrors.password && (
+                <p className="mt-1 text-sm text-red-600">{validationErrors.password}</p>
+              )}
             </div>
 
             {/* Remember me & Forgot password */}

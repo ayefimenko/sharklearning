@@ -10,9 +10,12 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=development
-      - GATEWAY_PORT=3000
+      - PORT=3000
       - ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
       - JWT_SECRET=your-super-secret-jwt-key
+      - USER_SERVICE_URL=http://user-service:3001
+      - CONTENT_SERVICE_URL=http://content-service:3011
+      - PROGRESS_SERVICE_URL=http://progress-service:3021
     depends_on:
       - user-service
       - redis
@@ -59,10 +62,10 @@ services:
       retries: 3
       start_period: 40s
 
-  # Course Service - Course management and content
-  course-service:
+  # Content Service - Course management and content
+  content-service:
     build:
-      context: ./services/course-service
+      context: ./services/content-service
       dockerfile: Dockerfile
     ports:
       - "3011:3011"
@@ -86,10 +89,10 @@ services:
       retries: 3
       start_period: 40s
 
-  # Learning Service - Progress tracking and analytics
-  learning-service:
+  # Progress Service - Progress tracking and analytics
+  progress-service:
     build:
-      context: ./services/learning-service
+      context: ./services/progress-service
       dockerfile: Dockerfile
     ports:
       - "3021:3021"
@@ -99,7 +102,7 @@ services:
       - DATABASE_URL=postgresql://sharklearning:password@postgres-learning:5432/sharklearning_learning
       - REDIS_URL=redis://redis:6379
       - USER_SERVICE_URL=http://user-service:3001
-      - COURSE_SERVICE_URL=http://course-service:3011
+      - CONTENT_SERVICE_URL=http://content-service:3011
     depends_on:
       - postgres-learning
       - redis
@@ -204,7 +207,7 @@ services:
     depends_on:
       - api-gateway
       - user-service
-      - course-service
+      - content-service
 
   # Grafana for monitoring dashboards
   grafana:

@@ -172,7 +172,7 @@ app.get('/overview', authenticateToken, async (req, res) => {
       stats: {
         completedCourses: parseInt(stats.completed_courses),
         totalEnrolled: parseInt(stats.total_enrolled),
-        averageProgress: Math.round(parseFloat(stats.average_progress)),
+        averageProgress: stats.average_progress ? Math.round(parseFloat(stats.average_progress)) : 0,
         totalPoints: parseInt(pointsResult.rows[0].total_points)
       },
       recentProgress,
@@ -189,6 +189,10 @@ app.get('/courses/:courseId', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const courseId = parseInt(req.params.courseId);
+    
+    if (isNaN(courseId)) {
+      return res.status(400).json({ error: 'Invalid course ID' });
+    }
 
     const result = await pool.query(
       'SELECT * FROM user_progress WHERE user_id = $1 AND course_id = $2',
@@ -200,7 +204,8 @@ app.get('/courses/:courseId', authenticateToken, async (req, res) => {
         courseId,
         progressPercentage: 0,
         isCompleted: false,
-        startedAt: null
+        startedAt: null,
+        updatedAt: null
       });
     }
 
@@ -228,7 +233,7 @@ app.put('/courses/:courseId', authenticateToken, [
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      return res.status(400).json({ error: 'Validation failed', details: errors.array() });
     }
 
     const userId = req.user.userId;
@@ -362,7 +367,7 @@ app.get('/leaderboard', async (req, res) => {
       achievementCount: parseInt(user.achievement_count)
     }));
 
-    res.json({ leaderboard });
+    res.json(leaderboard);
   } catch (error) {
     console.error('Leaderboard fetch error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -372,6 +377,12 @@ app.get('/leaderboard', async (req, res) => {
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Progress service error:', err);
+  
+  // Handle JSON parsing errors
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'Invalid JSON format' });
+  }
+  
   res.status(500).json({ error: 'Internal server error' });
 });
 
@@ -380,18 +391,20 @@ app.use('*', (req, res) => {
   res.status(404).json({ error: 'Endpoint not found' });
 });
 
-// Daily achievement check cron job
-cron.schedule('0 2 * * *', async () => {
-  console.log('Running daily achievement check...');
-  try {
-    const users = await pool.query('SELECT id FROM users WHERE is_active = true');
-    for (const user of users.rows) {
-      await checkAchievements(user.id);
+// Daily achievement check cron job (disabled in test mode)
+if (process.env.NODE_ENV !== 'test') {
+  cron.schedule('0 2 * * *', async () => {
+    console.log('Running daily achievement check...');
+    try {
+      const users = await pool.query('SELECT id FROM users WHERE is_active = true');
+      for (const user of users.rows) {
+        await checkAchievements(user.id);
+      }
+    } catch (error) {
+      console.error('Daily achievement check error:', error);
     }
-  } catch (error) {
-    console.error('Daily achievement check error:', error);
-  }
-});
+  });
+}
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
@@ -406,8 +419,12 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-// Start server
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`📊 Progress Service running on port ${PORT}`);
-  console.log(`📚 Environment: ${process.env.NODE_ENV || 'development'}`);
-}); 
+// Start server only if not in test mode
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`📊 Progress Service running on port ${PORT}`);
+    console.log(`📚 Environment: ${process.env.NODE_ENV || 'development'}`);
+  });
+}
+
+module.exports = app; 

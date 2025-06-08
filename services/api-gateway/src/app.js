@@ -39,7 +39,7 @@ const serviceRegistry = {
   'user-service': {
     name: 'user-service',
     instances: [
-      { url: 'http://localhost:3001', healthy: true, weight: 100 }
+      { url: 'http://user-service:8001', healthy: true, weight: 100 }
     ],
     healthEndpoint: '/health',
     circuitBreaker: new CircuitBreaker({
@@ -47,10 +47,21 @@ const serviceRegistry = {
       recoveryTimeout: 30000
     })
   },
-  'course-service': {
-    name: 'course-service', 
+  'content-service': {
+    name: 'content-service', 
     instances: [
-      { url: 'http://localhost:3011', healthy: true, weight: 100 }
+      { url: 'http://content-service:8002', healthy: true, weight: 100 }
+    ],
+    healthEndpoint: '/health',
+    circuitBreaker: new CircuitBreaker({
+      failureThreshold: 5,
+      recoveryTimeout: 30000
+    })
+  },
+  'progress-service': {
+    name: 'progress-service', 
+    instances: [
+      { url: 'http://progress-service:8003', healthy: true, weight: 100 }
     ],
     healthEndpoint: '/health',
     circuitBreaker: new CircuitBreaker({
@@ -62,9 +73,11 @@ const serviceRegistry = {
 
 // Route configuration
 const routeConfig = {
-  '/api/auth': { service: 'user-service', auth: false },
+  '/api/users/login': { service: 'user-service', auth: false },
+  '/api/users/register': { service: 'user-service', auth: false },
   '/api/users': { service: 'user-service', auth: true },
-  '/api/courses': { service: 'course-service', auth: true }
+  '/api/content': { service: 'content-service', auth: false },
+  '/api/progress': { service: 'progress-service', auth: true }
 };
 
 // Load balancer
@@ -267,8 +280,10 @@ app.use('/gateway/monitoring', (req, res, next) => {
   }
 });
 
-// Route handlers
-for (const [path, config] of Object.entries(routeConfig)) {
+// Route handlers - Order matters! More specific routes first
+const sortedRoutes = Object.entries(routeConfig).sort((a, b) => b[0].length - a[0].length);
+
+for (const [path, config] of sortedRoutes) {
   app.use(path, (req, res, next) => {
     if (config.auth) {
       authMiddleware(req, res, () => {

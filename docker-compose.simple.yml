@@ -1,0 +1,178 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=sharklearning
+      - POSTGRES_USER=sharklearning
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - sharklearning-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sharklearning -d sharklearning"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - sharklearning-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # User Service
+  user-service:
+    build:
+      context: ./services/user-service
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - NODE_ENV=development
+      - PORT=8001
+      - DATABASE_URL=postgresql://sharklearning:password@postgres:5432/sharklearning
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-super-secret-jwt-key-12345
+      - JWT_EXPIRES_IN=24h
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - sharklearning-network
+    volumes:
+      - ./services/user-service/src:/app/src
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Content Service
+  content-service:
+    build:
+      context: ./services/content-service
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      - NODE_ENV=development
+      - PORT=8002
+      - DATABASE_URL=postgresql://sharklearning:password@postgres:5432/sharklearning
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-super-secret-jwt-key-12345
+      - USER_SERVICE_URL=http://user-service:8001
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - sharklearning-network
+    volumes:
+      - ./services/content-service/src:/app/src
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Progress Service
+  progress-service:
+    build:
+      context: ./services/progress-service
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8003"
+    environment:
+      - NODE_ENV=development
+      - PORT=8003
+      - DATABASE_URL=postgresql://sharklearning:password@postgres:5432/sharklearning
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-super-secret-jwt-key-12345
+      - USER_SERVICE_URL=http://user-service:8001
+      - CONTENT_SERVICE_URL=http://content-service:8002
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - sharklearning-network
+    volumes:
+      - ./services/progress-service/src:/app/src
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - NODE_ENV=development
+      - PORT=8000
+      - JWT_SECRET=your-super-secret-jwt-key-12345
+      - USER_SERVICE_URL=http://user-service:8001
+      - CONTENT_SERVICE_URL=http://content-service:8002
+      - PROGRESS_SERVICE_URL=http://progress-service:8003
+    depends_on:
+      - user-service
+      - content-service
+      - progress-service
+    networks:
+      - sharklearning-network
+    volumes:
+      - ./services/api-gateway/src:/app/src
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend Application
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_ENVIRONMENT=development
+    depends_on:
+      - api-gateway
+    networks:
+      - sharklearning-network
+    volumes:
+      - ./frontend/src:/app/src
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  sharklearning-network:
+    driver: bridge 

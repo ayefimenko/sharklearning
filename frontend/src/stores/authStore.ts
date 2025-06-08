@@ -14,7 +14,8 @@ interface AuthState {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
-  login: (token: string, user: User) => void;
+  login: (email: string, password: string) => Promise<void>;
+  setAuth: (token: string, user: User) => void;
   logout: () => void;
   updateUser: (user: Partial<User>) => void;
 }
@@ -26,7 +27,29 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       isAuthenticated: false,
 
-      login: (token: string, user: User) => {
+      login: async (email: string, password: string) => {
+        const response = await fetch('/api/users/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email, password }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Login failed');
+        }
+
+        const data = await response.json();
+        set({
+          token: data.token,
+          user: data.user,
+          isAuthenticated: true,
+        });
+      },
+
+      setAuth: (token: string, user: User) => {
         set({
           token,
           user,

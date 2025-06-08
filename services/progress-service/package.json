@@ -6,10 +6,12 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test": "jest",
-    "test:unit": "jest --testPathPattern=unit",
-    "test:integration": "jest --testPathPattern=integration",
-    "test:watch": "jest --watch",
+    "test": "NODE_ENV=test jest --testPathPattern=progress.test.js",
+    "test:unit": "NODE_ENV=test jest --testPathPattern=progress.test.js",
+    "test:integration": "NODE_ENV=test jest --testPathPattern=integration.test.js --runInBand",
+    "test:all": "NODE_ENV=test jest --runInBand",
+    "test:watch": "NODE_ENV=test jest --watch",
+    "test:coverage": "NODE_ENV=test jest --coverage",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix"
   },
@@ -29,9 +31,26 @@
     "nodemon": "^3.0.2",
     "jest": "^29.7.0",
     "supertest": "^6.3.3",
-    "eslint": "^8.55.0"
+    "eslint": "^8.55.0",
+    "@types/jest": "^29.5.4"
   },
   "engines": {
     "node": ">=18.0.0"
-  }
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testTimeout": 10000,
+    "forceExit": true,
+    "detectOpenHandles": true,
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "!src/server.js",
+      "!src/tests/**"
+    ],
+    "coverageReporters": ["text", "lcov", "html"],
+    "testMatch": ["**/tests/**/*.test.js"]
+  },
+  "keywords": ["microservice", "progress", "achievements", "tracking"],
+  "author": "SharkLearning Team",
+  "license": "MIT"
 } 

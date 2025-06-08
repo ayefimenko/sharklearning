@@ -9,6 +9,7 @@ import Login from '@/pages/Login';
 import Register from '@/pages/Register';
 import Courses from '@/pages/Courses';
 import CourseDetail from '@/pages/CourseDetail';
+import Quiz from '@/pages/Quiz';
 import Profile from '@/pages/Profile';
 import './index.css';
 
@@ -50,6 +51,7 @@ function App() {
                       <Route path="/dashboard" element={<Dashboard />} />
                       <Route path="/courses" element={<Courses />} />
                       <Route path="/courses/:id" element={<CourseDetail />} />
+                      <Route path="/quiz/:quizId" element={<Quiz />} />
                       <Route path="/profile" element={<Profile />} />
                       <Route path="/" element={<Navigate to="/dashboard" />} />
                     </Routes>
