@@ -567,4 +567,257 @@ INSERT INTO achievements (title, description, icon, points, criteria, is_active)
 ('QA Expert', 'Complete all courses in QA Fundamentals track', '🏆', 500, '{"type": "track_completion", "track_id": 1}', true),
 ('Automation Master', 'Complete all courses in Test Automation track', '🤖', 750, '{"type": "track_completion", "track_id": 2}', true),
 ('Knowledge Seeker', 'Complete 10 courses total', '📚', 1000, '{"type": "total_courses", "count": 10}', true)
-ON CONFLICT DO NOTHING; 
+ON CONFLICT DO NOTHING;
+
+-- ====================================
+-- ADVANCED LEARNING PATHS & CURRICULUM
+-- ====================================
+
+-- Skills table - Define QA competencies and skills
+CREATE TABLE IF NOT EXISTS skills (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    description TEXT,
+    category VARCHAR(100) NOT NULL, -- 'technical', 'soft-skills', 'tools', 'methodologies'
+    level_description JSONB, -- {"beginner": "Basic understanding", "intermediate": "Practical application", "advanced": "Expert level"}
+    icon VARCHAR(100),
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Prerequisites table - Define learning dependencies
+CREATE TABLE IF NOT EXISTS prerequisites (
+    id SERIAL PRIMARY KEY,
+    content_type VARCHAR(50) NOT NULL, -- 'course', 'track', 'skill'
+    content_id INTEGER NOT NULL,
+    prerequisite_type VARCHAR(50) NOT NULL, -- 'course', 'track', 'skill'
+    prerequisite_id INTEGER NOT NULL,
+    is_required BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(content_type, content_id, prerequisite_type, prerequisite_id)
+);
+
+-- Learning paths table - Structured learning progressions
+CREATE TABLE IF NOT EXISTS learning_paths (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    target_role VARCHAR(100), -- 'junior-qa', 'middle-qa', 'senior-qa', 'automation-engineer'
+    difficulty_progression JSONB, -- {"start": "beginner", "end": "advanced"}
+    estimated_weeks INTEGER DEFAULT 12,
+    skills_gained JSONB, -- Array of skill IDs and target levels
+    is_published BOOLEAN DEFAULT false,
+    is_certification_path BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Learning path items - Ordered content in learning paths
+CREATE TABLE IF NOT EXISTS learning_path_items (
+    id SERIAL PRIMARY KEY,
+    learning_path_id INTEGER REFERENCES learning_paths(id) ON DELETE CASCADE,
+    content_type VARCHAR(50) NOT NULL, -- 'track', 'course'
+    content_id INTEGER NOT NULL,
+    order_index INTEGER NOT NULL,
+    is_optional BOOLEAN DEFAULT false,
+    estimated_hours INTEGER DEFAULT 0,
+    skills_focus JSONB, -- Array of skill IDs this item focuses on
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(learning_path_id, content_type, content_id)
+);
+
+-- User skills table - Track individual skill levels
+CREATE TABLE IF NOT EXISTS user_skills (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    skill_id INTEGER REFERENCES skills(id) ON DELETE CASCADE,
+    current_level VARCHAR(50) DEFAULT 'beginner', -- 'beginner', 'intermediate', 'advanced', 'expert'
+    evidence_count INTEGER DEFAULT 0, -- Number of courses/assessments completed for this skill
+    last_improved TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, skill_id)
+);
+
+-- Course skills mapping - Skills that courses develop
+CREATE TABLE IF NOT EXISTS course_skills (
+    id SERIAL PRIMARY KEY,
+    course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
+    skill_id INTEGER REFERENCES skills(id) ON DELETE CASCADE,
+    skill_level VARCHAR(50) DEFAULT 'beginner', -- Level this course develops the skill to
+    importance INTEGER DEFAULT 1, -- 1-5 scale of how important this skill is for the course
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(course_id, skill_id)
+);
+
+-- User learning paths - Track user enrollment in learning paths
+CREATE TABLE IF NOT EXISTS user_learning_paths (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    learning_path_id INTEGER REFERENCES learning_paths(id) ON DELETE CASCADE,
+    progress_percentage INTEGER DEFAULT 0 CHECK (progress_percentage >= 0 AND progress_percentage <= 100),
+    current_item_id INTEGER REFERENCES learning_path_items(id),
+    is_completed BOOLEAN DEFAULT false,
+    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP,
+    estimated_completion DATE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, learning_path_id)
+);
+
+-- Certifications table - Define certification programs
+CREATE TABLE IF NOT EXISTS certifications (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    learning_path_id INTEGER REFERENCES learning_paths(id),
+    requirements JSONB, -- Skills and levels required, assessments to pass
+    certificate_template VARCHAR(500), -- Template for certificate generation
+    validity_months INTEGER DEFAULT 12, -- How long certification is valid
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- User certifications - Track earned certifications
+CREATE TABLE IF NOT EXISTS user_certifications (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    certification_id INTEGER REFERENCES certifications(id) ON DELETE CASCADE,
+    earned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP,
+    certificate_url VARCHAR(500), -- Link to generated certificate
+    verification_code VARCHAR(100) UNIQUE, -- Unique code for certificate verification
+    is_valid BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Skill assessments - Track skill evaluation through assessments
+CREATE TABLE IF NOT EXISTS skill_assessments (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    skill_id INTEGER REFERENCES skills(id) ON DELETE CASCADE,
+    assessment_type VARCHAR(50) NOT NULL, -- 'quiz', 'practical', 'peer-review', 'self-assessment'
+    source_type VARCHAR(50), -- 'course', 'quiz', 'external'
+    source_id INTEGER, -- ID of the course, quiz, etc.
+    score_percentage INTEGER CHECK (score_percentage >= 0 AND score_percentage <= 100),
+    level_achieved VARCHAR(50), -- 'beginner', 'intermediate', 'advanced', 'expert'
+    feedback TEXT,
+    assessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create indexes for learning paths system
+CREATE INDEX IF NOT EXISTS idx_skills_category ON skills(category);
+CREATE INDEX IF NOT EXISTS idx_skills_active ON skills(is_active);
+CREATE INDEX IF NOT EXISTS idx_prerequisites_content ON prerequisites(content_type, content_id);
+CREATE INDEX IF NOT EXISTS idx_prerequisites_prerequisite ON prerequisites(prerequisite_type, prerequisite_id);
+CREATE INDEX IF NOT EXISTS idx_learning_paths_target_role ON learning_paths(target_role);
+CREATE INDEX IF NOT EXISTS idx_learning_paths_published ON learning_paths(is_published);
+CREATE INDEX IF NOT EXISTS idx_learning_path_items_path_id ON learning_path_items(learning_path_id);
+CREATE INDEX IF NOT EXISTS idx_learning_path_items_order ON learning_path_items(learning_path_id, order_index);
+CREATE INDEX IF NOT EXISTS idx_user_skills_user_id ON user_skills(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_skills_skill_id ON user_skills(skill_id);
+CREATE INDEX IF NOT EXISTS idx_course_skills_course_id ON course_skills(course_id);
+CREATE INDEX IF NOT EXISTS idx_course_skills_skill_id ON course_skills(skill_id);
+CREATE INDEX IF NOT EXISTS idx_user_learning_paths_user_id ON user_learning_paths(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_learning_paths_path_id ON user_learning_paths(learning_path_id);
+CREATE INDEX IF NOT EXISTS idx_user_certifications_user_id ON user_certifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_certifications_verification ON user_certifications(verification_code);
+CREATE INDEX IF NOT EXISTS idx_skill_assessments_user_skill ON skill_assessments(user_id, skill_id);
+
+-- ====================================
+-- SAMPLE DATA FOR LEARNING PATHS
+-- ====================================
+
+-- Insert QA Skills
+INSERT INTO skills (name, description, category, level_description, icon) VALUES
+('Manual Testing', 'Ability to design and execute manual test cases effectively', 'technical', 
+ '{"beginner": "Can execute basic test cases", "intermediate": "Can design comprehensive test scenarios", "advanced": "Can lead testing strategy and mentor others"}', '🧪'),
+('Test Automation', 'Skills in automated testing tools and frameworks', 'technical',
+ '{"beginner": "Basic scripting with automation tools", "intermediate": "Can build robust test frameworks", "advanced": "Can architect enterprise automation solutions"}', '🤖'),
+('API Testing', 'Testing RESTful APIs and web services', 'technical',
+ '{"beginner": "Can test APIs using tools like Postman", "intermediate": "Can write automated API tests", "advanced": "Can design comprehensive API testing strategies"}', '🔌'),
+('Performance Testing', 'Load, stress, and performance testing techniques', 'technical',
+ '{"beginner": "Understands performance concepts", "intermediate": "Can execute performance tests", "advanced": "Can design performance test strategies"}', '⚡'),
+('SQL & Databases', 'Database testing and SQL query skills', 'technical',
+ '{"beginner": "Basic SQL queries for data validation", "intermediate": "Complex queries and database testing", "advanced": "Database performance and optimization testing"}', '🗄️'),
+('Test Planning', 'Creating comprehensive test plans and strategies', 'methodologies',
+ '{"beginner": "Can follow existing test plans", "intermediate": "Can create detailed test plans", "advanced": "Can design enterprise testing strategies"}', '📋'),
+('Bug Reporting', 'Effective defect identification and documentation', 'methodologies',
+ '{"beginner": "Can log basic bug reports", "intermediate": "Detailed bug analysis and reporting", "advanced": "Root cause analysis and prevention strategies"}', '🐛'),
+('Agile Testing', 'Testing in Agile/Scrum environments', 'methodologies',
+ '{"beginner": "Understands Agile basics", "intermediate": "Effective testing in sprints", "advanced": "Can lead Agile testing transformation"}', '🔄'),
+('Communication', 'Effective communication with stakeholders', 'soft-skills',
+ '{"beginner": "Clear basic communication", "intermediate": "Stakeholder management", "advanced": "Leadership and mentoring communication"}', '💬'),
+('Problem Solving', 'Analytical thinking and troubleshooting', 'soft-skills',
+ '{"beginner": "Basic troubleshooting", "intermediate": "Systematic problem solving", "advanced": "Complex system analysis and optimization"}', '🧩'),
+('Selenium WebDriver', 'Web automation using Selenium', 'tools',
+ '{"beginner": "Basic element interactions", "intermediate": "Page Object Model implementation", "advanced": "Framework architecture and optimization"}', '🌐'),
+('Postman', 'API testing using Postman', 'tools',
+ '{"beginner": "Manual API testing", "intermediate": "Automated API test suites", "advanced": "CI/CD integration and advanced scripting"}', '📮'),
+('JIRA', 'Test management using JIRA', 'tools',
+ '{"beginner": "Basic ticket management", "intermediate": "Test case management", "advanced": "Workflow customization and reporting"}', '📊')
+ON CONFLICT (name) DO NOTHING;
+
+-- Insert Learning Paths
+INSERT INTO learning_paths (title, description, target_role, difficulty_progression, estimated_weeks, skills_gained, is_published, is_certification_path) VALUES
+('Junior QA Engineer Track', 'Complete learning path from beginner to job-ready Junior QA Engineer', 'junior-qa',
+ '{"start": "beginner", "end": "intermediate"}', 16,
+ '[{"skill": "Manual Testing", "level": "intermediate"}, {"skill": "Test Planning", "level": "intermediate"}, {"skill": "Bug Reporting", "level": "intermediate"}, {"skill": "SQL & Databases", "level": "beginner"}, {"skill": "Agile Testing", "level": "beginner"}]',
+ true, true),
+('QA Automation Engineer Track', 'Advanced path focusing on test automation and tools', 'automation-engineer',
+ '{"start": "intermediate", "end": "advanced"}', 20,
+ '[{"skill": "Test Automation", "level": "advanced"}, {"skill": "Selenium WebDriver", "level": "advanced"}, {"skill": "API Testing", "level": "intermediate"}, {"skill": "Performance Testing", "level": "intermediate"}]',
+ true, true),
+('Senior QA Engineer Track', 'Leadership and advanced testing strategy path', 'senior-qa',
+ '{"start": "intermediate", "end": "advanced"}', 24,
+ '[{"skill": "Test Planning", "level": "advanced"}, {"skill": "Problem Solving", "level": "advanced"}, {"skill": "Communication", "level": "advanced"}, {"skill": "Agile Testing", "level": "advanced"}]',
+ true, true)
+ON CONFLICT DO NOTHING;
+
+-- Map learning path items (connecting existing tracks to learning paths)
+INSERT INTO learning_path_items (learning_path_id, content_type, content_id, order_index, is_optional, estimated_hours, skills_focus) VALUES
+-- Junior QA Engineer Track
+(1, 'track', 1, 1, false, 20, '[1, 6, 7]'), -- QA Fundamentals -> Manual Testing, Test Planning, Bug Reporting
+(1, 'track', 2, 2, false, 30, '[2, 11, 12]'), -- Test Automation Basics -> Test Automation, Selenium, Postman
+
+-- QA Automation Engineer Track  
+(2, 'track', 2, 1, false, 30, '[2, 11]'), -- Test Automation Basics -> Test Automation, Selenium
+(2, 'track', 3, 2, false, 40, '[3, 4]'), -- Advanced Testing -> API Testing, Performance Testing
+
+-- Senior QA Engineer Track
+(3, 'track', 1, 1, false, 20, '[6, 8, 9]'), -- QA Fundamentals -> Test Planning, Agile Testing, Communication
+(3, 'track', 3, 2, false, 40, '[10, 8]') -- Advanced Testing -> Problem Solving, Agile Testing
+ON CONFLICT DO NOTHING;
+
+-- Map course skills (connecting courses to skills they develop)
+INSERT INTO course_skills (course_id, skill_id, skill_level, importance) VALUES
+-- QA Fundamentals courses
+(1, 1, 'beginner', 5), -- Introduction to Software Testing -> Manual Testing
+(1, 6, 'beginner', 4), -- Introduction to Software Testing -> Test Planning
+(1, 7, 'beginner', 4), -- Introduction to Software Testing -> Bug Reporting
+(2, 1, 'intermediate', 5), -- Testing Methodologies -> Manual Testing
+(2, 6, 'intermediate', 4), -- Testing Methodologies -> Test Planning
+(3, 7, 'intermediate', 5), -- QA Knowledge Check -> Bug Reporting
+(3, 9, 'beginner', 3) -- QA Knowledge Check -> Communication
+ON CONFLICT DO NOTHING;
+
+-- Insert sample certifications
+INSERT INTO certifications (title, description, learning_path_id, requirements, validity_months, is_active) VALUES
+('Certified Junior QA Engineer', 'Industry-recognized certification for entry-level QA professionals', 1,
+ '{"skills_required": [{"skill_id": 1, "min_level": "intermediate"}, {"skill_id": 6, "min_level": "intermediate"}], "courses_required": 2, "assessments_required": 3}',
+ 24, true),
+('Certified QA Automation Specialist', 'Advanced certification for automation testing professionals', 2,
+ '{"skills_required": [{"skill_id": 2, "min_level": "advanced"}, {"skill_id": 11, "min_level": "advanced"}], "practical_projects": 2}',
+ 18, true),
+('Senior QA Leadership Certificate', 'Leadership certification for senior QA professionals', 3,
+ '{"skills_required": [{"skill_id": 6, "min_level": "advanced"}, {"skill_id": 9, "min_level": "advanced"}], "mentoring_hours": 40}',
+ 36, true)
+ON CONFLICT DO NOTHING;
+
+-- ====================================
+-- END LEARNING PATHS SCHEMA
+-- ==================================== 

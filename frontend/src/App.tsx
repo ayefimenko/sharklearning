@@ -11,6 +11,9 @@ import Courses from '@/pages/Courses';
 import CourseDetail from '@/pages/CourseDetail';
 import Quiz from '@/pages/Quiz';
 import Profile from '@/pages/Profile';
+import Settings from '@/pages/Settings';
+import Admin from '@/pages/Admin';
+import LearningPaths from '@/pages/LearningPaths';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -52,7 +55,10 @@ function App() {
                       <Route path="/courses" element={<Courses />} />
                       <Route path="/courses/:id" element={<CourseDetail />} />
                       <Route path="/quiz/:quizId" element={<Quiz />} />
+                      <Route path="/learning-paths" element={<LearningPaths />} />
                       <Route path="/profile" element={<Profile />} />
+                      <Route path="/settings" element={<Settings />} />
+                      <Route path="/admin" element={<Admin />} />
                       <Route path="/" element={<Navigate to="/dashboard" />} />
                     </Routes>
                   </Layout>

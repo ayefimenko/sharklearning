@@ -7,7 +7,7 @@ interface Course {
   title: string;
   description: string;
   content: string;
-  orderIndex: number;
+  orderInTrack: number;
   isPublished: boolean;
   createdAt: string;
 }
@@ -76,12 +76,19 @@ const CourseDetail: React.FC = () => {
       }
       
       const data = await response.json();
-      setTrack(data);
+      
+      // Combine track and courses data as expected by the component
+      const trackWithCourses = {
+        ...data.track,
+        courses: data.courses || []
+      };
       
       // Sort courses by order index
-      if (data.courses) {
-        data.courses.sort((a: Course, b: Course) => a.orderIndex - b.orderIndex);
+      if (trackWithCourses.courses) {
+        trackWithCourses.courses.sort((a: Course, b: Course) => a.orderInTrack - b.orderInTrack);
       }
+      
+      setTrack(trackWithCourses);
       
     } catch (err) {
       console.error('Error fetching track detail:', err);

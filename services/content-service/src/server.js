@@ -23,7 +23,7 @@ app.use(morgan('combined'));
 app.use(express.json());
 
 // JWT secret
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key';
 
 // Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
@@ -56,21 +56,21 @@ app.get('/health', (req, res) => {
 app.get('/tracks', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, title, description, difficulty_level, estimated_hours, prerequisites, is_published, created_at, updated_at FROM learning_tracks WHERE is_published = true ORDER BY created_at DESC'
+      'SELECT id, title, description, difficulty_level, estimated_hours, is_published, created_at, updated_at FROM learning_tracks WHERE is_published = true ORDER BY created_at DESC'
     );
 
     const tracks = result.rows.map(track => ({
       id: track.id,
       title: track.title,
       description: track.description,
-      difficulty: track.difficulty_level,
-      estimatedDuration: track.estimated_hours + ' hours',
-      prerequisites: track.prerequisites,
+      difficultyLevel: track.difficulty_level,
+      estimatedHours: track.estimated_hours,
+      isPublished: track.is_published,
       createdAt: track.created_at,
       updatedAt: track.updated_at
     }));
 
-    res.json(tracks);
+    res.json({ tracks });
   } catch (error) {
     console.error('Tracks fetch error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -88,7 +88,7 @@ app.get('/tracks/:id', async (req, res) => {
 
     // Get track details
     const trackResult = await pool.query(
-      'SELECT id, title, description, difficulty_level, estimated_hours, prerequisites, is_published, created_at, updated_at FROM learning_tracks WHERE id = $1',
+      'SELECT id, title, description, difficulty_level, estimated_hours, is_published, created_at, updated_at FROM learning_tracks WHERE id = $1',
       [trackId]
     );
 
@@ -120,9 +120,9 @@ app.get('/tracks/:id', async (req, res) => {
         id: track.id,
         title: track.title,
         description: track.description,
-        difficulty: track.difficulty_level,
-        estimatedDuration: track.estimated_hours + ' hours',
-        prerequisites: track.prerequisites,
+        difficultyLevel: track.difficulty_level,
+        estimatedHours: track.estimated_hours,
+        isPublished: track.is_published,
         createdAt: track.created_at,
         updatedAt: track.updated_at
       },
@@ -605,6 +605,531 @@ app.post('/courses', authenticateToken, [
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// ========================
+// CONTENT MANAGEMENT & AUTHORING ENDPOINTS
+// ========================
+
+// Update existing course (admin only)
+app.put('/courses/:id', authenticateToken, [
+  body('title').optional().trim().isLength({ min: 1, max: 255 }),
+  body('description').optional().trim(),
+  body('content').optional().trim().isLength({ min: 1 }),
+  body('orderIndex').optional().isInt({ min: 0 }),
+  body('isPublished').optional().isBoolean()
+], async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const courseId = parseInt(req.params.id);
+    if (isNaN(courseId)) {
+      return res.status(400).json({ error: 'Invalid course ID' });
+    }
+
+    const { title, description, content, orderIndex, isPublished } = req.body;
+    
+    // Build dynamic update query
+    const updates = [];
+    const values = [];
+    let paramCount = 1;
+
+    if (title !== undefined) {
+      updates.push(`title = $${paramCount++}`);
+      values.push(title);
+    }
+    if (description !== undefined) {
+      updates.push(`description = $${paramCount++}`);
+      values.push(description);
+    }
+    if (content !== undefined) {
+      updates.push(`content = $${paramCount++}`);
+      values.push(content);
+    }
+    if (orderIndex !== undefined) {
+      updates.push(`order_index = $${paramCount++}`);
+      values.push(orderIndex);
+    }
+    if (isPublished !== undefined) {
+      updates.push(`is_published = $${paramCount++}`);
+      values.push(isPublished);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    updates.push(`updated_at = CURRENT_TIMESTAMP`);
+    values.push(courseId);
+
+    const query = `UPDATE courses SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`;
+    const result = await pool.query(query, values);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Course not found' });
+    }
+
+    const course = result.rows[0];
+    res.json({
+      message: 'Course updated successfully',
+      course: {
+        id: course.id,
+        trackId: course.track_id,
+        title: course.title,
+        description: course.description,
+        content: course.content,
+        orderIndex: course.order_index,
+        isPublished: course.is_published,
+        createdAt: course.created_at,
+        updatedAt: course.updated_at
+      }
+    });
+  } catch (error) {
+    console.error('Course update error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update learning track (admin only)
+app.put('/tracks/:id', authenticateToken, [
+  body('title').optional().trim().isLength({ min: 1, max: 255 }),
+  body('description').optional().trim(),
+  body('difficultyLevel').optional().isIn(['beginner', 'intermediate', 'advanced']),
+  body('estimatedHours').optional().isInt({ min: 1 }),
+  body('isPublished').optional().isBoolean()
+], async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const trackId = parseInt(req.params.id);
+    if (isNaN(trackId)) {
+      return res.status(400).json({ error: 'Invalid track ID' });
+    }
+
+    const { title, description, difficultyLevel, estimatedHours, isPublished } = req.body;
+    
+    // Build dynamic update query
+    const updates = [];
+    const values = [];
+    let paramCount = 1;
+
+    if (title !== undefined) {
+      updates.push(`title = $${paramCount++}`);
+      values.push(title);
+    }
+    if (description !== undefined) {
+      updates.push(`description = $${paramCount++}`);
+      values.push(description);
+    }
+    if (difficultyLevel !== undefined) {
+      updates.push(`difficulty_level = $${paramCount++}`);
+      values.push(difficultyLevel);
+    }
+    if (estimatedHours !== undefined) {
+      updates.push(`estimated_hours = $${paramCount++}`);
+      values.push(estimatedHours);
+    }
+    if (isPublished !== undefined) {
+      updates.push(`is_published = $${paramCount++}`);
+      values.push(isPublished);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    updates.push(`updated_at = CURRENT_TIMESTAMP`);
+    values.push(trackId);
+
+    const query = `UPDATE learning_tracks SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`;
+    const result = await pool.query(query, values);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Learning track not found' });
+    }
+
+    const track = result.rows[0];
+    res.json({
+      message: 'Learning track updated successfully',
+      track: {
+        id: track.id,
+        title: track.title,
+        description: track.description,
+        difficultyLevel: track.difficulty_level,
+        estimatedHours: track.estimated_hours,
+        isPublished: track.is_published,
+        createdAt: track.created_at,
+        updatedAt: track.updated_at
+      }
+    });
+  } catch (error) {
+    console.error('Track update error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete course (admin only)
+app.delete('/courses/:id', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const courseId = parseInt(req.params.id);
+    if (isNaN(courseId)) {
+      return res.status(400).json({ error: 'Invalid course ID' });
+    }
+
+    const result = await pool.query('DELETE FROM courses WHERE id = $1 RETURNING id, title', [courseId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Course not found' });
+    }
+
+    res.json({
+      message: 'Course deleted successfully',
+      deletedCourse: {
+        id: result.rows[0].id,
+        title: result.rows[0].title
+      }
+    });
+  } catch (error) {
+    console.error('Course deletion error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete learning track (admin only)
+app.delete('/tracks/:id', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const trackId = parseInt(req.params.id);
+    if (isNaN(trackId)) {
+      return res.status(400).json({ error: 'Invalid track ID' });
+    }
+
+    // Check if track has courses
+    const coursesCheck = await pool.query('SELECT COUNT(*) as count FROM courses WHERE track_id = $1', [trackId]);
+    const courseCount = parseInt(coursesCheck.rows[0].count);
+
+    if (courseCount > 0) {
+      return res.status(400).json({ 
+        error: 'Cannot delete track with existing courses',
+        courseCount
+      });
+    }
+
+    const result = await pool.query('DELETE FROM learning_tracks WHERE id = $1 RETURNING id, title', [trackId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Learning track not found' });
+    }
+
+    res.json({
+      message: 'Learning track deleted successfully',
+      deletedTrack: {
+        id: result.rows[0].id,
+        title: result.rows[0].title
+      }
+    });
+  } catch (error) {
+    console.error('Track deletion error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get all content for admin management
+app.get('/admin/content', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { page = 1, limit = 20, status = 'all', type = 'all' } = req.query;
+    const offset = (page - 1) * limit;
+
+    // Build dynamic query based on filters
+    let whereConditions = [];
+    let queryParams = [];
+    let paramCount = 1;
+
+    if (status !== 'all') {
+      const isPublished = status === 'published';
+      whereConditions.push(`is_published = $${paramCount++}`);
+      queryParams.push(isPublished);
+    }
+
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
+    let contentData = {};
+
+    // Get tracks if requested
+    if (type === 'all' || type === 'tracks') {
+      const tracksQuery = `
+        SELECT id, title, description, difficulty_level, estimated_hours, is_published, created_at, updated_at
+        FROM learning_tracks ${whereClause}
+        ORDER BY created_at DESC
+        LIMIT $${paramCount++} OFFSET $${paramCount++}
+      `;
+      queryParams.push(limit, offset);
+      
+      const tracksResult = await pool.query(tracksQuery, queryParams);
+      contentData.tracks = tracksResult.rows.map(track => ({
+        id: track.id,
+        title: track.title,
+        description: track.description,
+        difficultyLevel: track.difficulty_level,
+        estimatedHours: track.estimated_hours,
+        isPublished: track.is_published,
+        createdAt: track.created_at,
+        updatedAt: track.updated_at
+      }));
+      
+      // Reset params for courses query
+      queryParams = queryParams.slice(0, whereConditions.length);
+      paramCount = whereConditions.length + 1;
+    }
+
+    // Get courses if requested
+    if (type === 'all' || type === 'courses') {
+      const coursesQuery = `
+        SELECT c.id, c.title, c.description, c.track_id, c.order_index, c.is_published, c.created_at, c.updated_at,
+               t.title as track_title
+        FROM courses c
+        JOIN learning_tracks t ON c.track_id = t.id
+        ${whereClause.replace(/is_published/g, 'c.is_published')}
+        ORDER BY c.created_at DESC
+        LIMIT $${paramCount++} OFFSET $${paramCount++}
+      `;
+      queryParams.push(limit, offset);
+      
+      const coursesResult = await pool.query(coursesQuery, queryParams);
+      contentData.courses = coursesResult.rows.map(course => ({
+        id: course.id,
+        title: course.title,
+        description: course.description,
+        trackId: course.track_id,
+        trackTitle: course.track_title,
+        orderIndex: course.order_index,
+        isPublished: course.is_published,
+        createdAt: course.created_at,
+        updatedAt: course.updated_at
+      }));
+    }
+
+    res.json({
+      content: contentData,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        hasMore: (contentData.tracks?.length || contentData.courses?.length) === parseInt(limit)
+      }
+    });
+  } catch (error) {
+    console.error('Admin content fetch error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Bulk content operations (admin only)
+app.post('/admin/content/bulk', authenticateToken, [
+  body('operation').isIn(['publish', 'unpublish', 'delete']),
+  body('type').isIn(['tracks', 'courses']),
+  body('ids').isArray({ min: 1 }),
+  body('ids.*').isInt()
+], async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { operation, type, ids } = req.body;
+    const table = type === 'tracks' ? 'learning_tracks' : 'courses';
+    
+    let query;
+    let values = [ids];
+
+    switch (operation) {
+      case 'publish':
+        query = `UPDATE ${table} SET is_published = true, updated_at = CURRENT_TIMESTAMP WHERE id = ANY($1) RETURNING id, title`;
+        break;
+      case 'unpublish':
+        query = `UPDATE ${table} SET is_published = false, updated_at = CURRENT_TIMESTAMP WHERE id = ANY($1) RETURNING id, title`;
+        break;
+      case 'delete':
+        if (type === 'tracks') {
+          // Check for courses in tracks before deletion
+          const coursesCheck = await pool.query('SELECT track_id, COUNT(*) as count FROM courses WHERE track_id = ANY($1) GROUP BY track_id', [ids]);
+          if (coursesCheck.rows.length > 0) {
+            return res.status(400).json({ 
+              error: 'Cannot delete tracks with existing courses',
+              tracksWithCourses: coursesCheck.rows
+            });
+          }
+        }
+        query = `DELETE FROM ${table} WHERE id = ANY($1) RETURNING id, title`;
+        break;
+    }
+
+    const result = await pool.query(query, values);
+
+    res.json({
+      message: `Bulk ${operation} completed successfully`,
+      affected: result.rows.length,
+      items: result.rows
+    });
+  } catch (error) {
+    console.error('Bulk operation error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Content templates endpoint (admin only)
+app.get('/admin/templates', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    // Predefined content templates for QA courses
+    const templates = [
+      {
+        id: 'qa-fundamentals',
+        name: 'QA Fundamentals Course',
+        description: 'Template for basic QA concepts course',
+        content: `# Course Introduction
+
+Welcome to this comprehensive course on Quality Assurance fundamentals.
+
+## Learning Objectives
+- Understand the role of QA in software development
+- Learn basic testing methodologies
+- Practice essential QA skills
+
+## Course Modules
+
+### Module 1: Introduction to QA
+What is Quality Assurance and why is it important?
+
+### Module 2: Testing Types
+- Unit Testing
+- Integration Testing  
+- System Testing
+- Acceptance Testing
+
+### Module 3: Test Planning
+How to create effective test plans and test cases.
+
+## Exercises
+1. Create your first test case
+2. Execute manual testing scenarios
+3. Document defects effectively
+
+## Assessment
+Complete the quiz to test your understanding of QA fundamentals.`,
+        sections: ['Introduction', 'Learning Objectives', 'Course Modules', 'Exercises', 'Assessment']
+      },
+      {
+        id: 'automation-basics',
+        name: 'Test Automation Basics',
+        description: 'Template for test automation introduction',
+        content: `# Test Automation Course
+
+Learn the fundamentals of automated testing and tools.
+
+## What You'll Learn
+- Automation framework concepts
+- Popular automation tools
+- Writing effective automated tests
+
+## Course Content
+
+### Introduction to Automation
+Why automate testing and when to use automation.
+
+### Tools Overview
+- Selenium WebDriver
+- Cypress
+- Postman for API testing
+
+### Hands-on Practice
+Build your first automated test suite.
+
+## Lab Exercises
+1. Set up automation environment
+2. Write your first automated test
+3. Create test reports
+
+## Final Project
+Design and implement an automation strategy for a sample application.`,
+        sections: ['Introduction', 'Tools Overview', 'Hands-on Practice', 'Lab Exercises', 'Final Project']
+      },
+      {
+        id: 'api-testing',
+        name: 'API Testing Course',
+        description: 'Template for API testing fundamentals',
+        content: `# API Testing Fundamentals
+
+Master the art of testing APIs and web services.
+
+## Course Overview
+Learn to test REST APIs, validate responses, and automate API tests.
+
+### Prerequisites  
+- Basic understanding of HTTP
+- Familiarity with JSON/XML
+
+### Topics Covered
+1. REST API concepts
+2. HTTP methods and status codes
+3. API testing tools (Postman, REST Assured)
+4. Test data management
+5. API automation strategies
+
+### Practical Exercises
+- Manual API testing with Postman
+- Automated API tests with scripts
+- Performance testing APIs
+
+### Assessment Methods
+- Hands-on lab completion
+- API test suite creation
+- Quiz on API testing concepts`,
+        sections: ['Overview', 'Prerequisites', 'Topics', 'Exercises', 'Assessment']
+      }
+    ];
+
+    res.json({ templates });
+  } catch (error) {
+    console.error('Templates fetch error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ========================
+// END CONTENT MANAGEMENT
+// ========================
 
 // Error handling middleware
 app.use((err, req, res, next) => {

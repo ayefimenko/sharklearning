@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Clock, CheckCircle, XCircle, ArrowRight, ArrowLeft } from 'lucide-react';
+import { useAuthStore } from '@/stores/authStore';
 
 interface Question {
   id: number;
@@ -48,6 +49,7 @@ interface QuizResult {
 const Quiz: React.FC = () => {
   const { quizId } = useParams<{ quizId: string }>();
   const navigate = useNavigate();
+  const { token } = useAuthStore();
   
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [loading, setLoading] = useState(true);
@@ -122,7 +124,7 @@ const Quiz: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(submissionData)
       });

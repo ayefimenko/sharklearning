@@ -23,7 +23,7 @@ const RATE_LIMITS = {
   },
   guest: {
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 50, // 50 requests per window for unauthenticated users
+    max: 1000, // Increased from 50 to 1000 for development
     message: 'Guest rate limit exceeded. Please register or try again later.'
   }
 };
@@ -116,7 +116,7 @@ const rateLimiters = {
   
   // Authentication endpoints (more restrictive)
   auth: createUserRateLimit({ 
-    multiplier: 0.1, // 10% of normal limit
+    multiplier: 0.5, // Increased from 0.1 to 0.5 for development
     windowMs: 5 * 60 * 1000 // 5-minute window
   }),
   

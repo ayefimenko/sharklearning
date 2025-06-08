@@ -11,6 +11,7 @@ import {
   BellIcon,
   MagnifyingGlassIcon,
   UserCircleIcon,
+  CogIcon,
 } from '@heroicons/react/24/outline';
 
 interface LayoutProps {
@@ -25,6 +26,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
     { name: 'Inbox', href: '/inbox', icon: InboxIcon },
     { name: 'Lesson', href: '/courses', icon: BookOpenIcon },
+    { name: 'Learning Paths', href: '/learning-paths', icon: BookOpenIcon },
     { name: 'Task', href: '/tasks', icon: UserGroupIcon },
     { name: 'Group', href: '/groups', icon: UserGroupIcon },
   ];
@@ -37,6 +39,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   const settings = [
     { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
+    ...(user?.role === 'admin' ? [{ name: 'Admin Panel', href: '/admin', icon: CogIcon }] : []),
   ];
 
   const handleLogout = () => {

@@ -75,6 +75,7 @@ services:
       - DATABASE_URL=postgresql://sharklearning:password@postgres-courses:5432/sharklearning_courses
       - REDIS_URL=redis://redis:6379
       - USER_SERVICE_URL=http://user-service:3001
+      - JWT_SECRET=your-super-secret-jwt-key
     depends_on:
       - postgres-courses
       - redis
