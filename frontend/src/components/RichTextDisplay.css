@@ -1,0 +1,191 @@
+.rich-text-display {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #e5e7eb;
+}
+
+.rich-text-display h1,
+.rich-text-display h2,
+.rich-text-display h3,
+.rich-text-display h4,
+.rich-text-display h5,
+.rich-text-display h6 {
+  font-weight: 600;
+  margin: 24px 0 16px 0;
+  color: #ffffff;
+}
+
+.rich-text-display h1 { font-size: 2rem; }
+.rich-text-display h2 { font-size: 1.75rem; }
+.rich-text-display h3 { font-size: 1.5rem; }
+.rich-text-display h4 { font-size: 1.25rem; }
+.rich-text-display h5 { font-size: 1.125rem; }
+.rich-text-display h6 { font-size: 1rem; }
+
+.rich-text-display p {
+  margin: 16px 0;
+}
+
+.rich-text-display strong {
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.rich-text-display em {
+  font-style: italic;
+}
+
+.rich-text-display u {
+  text-decoration: underline;
+}
+
+.rich-text-display s {
+  text-decoration: line-through;
+}
+
+.rich-text-display ul,
+.rich-text-display ol {
+  margin: 16px 0;
+  padding-left: 24px;
+}
+
+.rich-text-display li {
+  margin: 8px 0;
+}
+
+.rich-text-display ul li {
+  list-style-type: disc;
+}
+
+.rich-text-display ol li {
+  list-style-type: decimal;
+}
+
+.rich-text-display blockquote {
+  border-left: 4px solid #3b82f6;
+  margin: 16px 0;
+  padding-left: 16px;
+  color: #9ca3af;
+  font-style: italic;
+  background: rgba(59, 130, 246, 0.05);
+  padding: 16px;
+  border-radius: 6px;
+}
+
+.rich-text-display pre {
+  background-color: #374151;
+  border: 1px solid #4b5563;
+  border-radius: 6px;
+  padding: 16px;
+  margin: 16px 0;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+  overflow-x: auto;
+  color: #f3f4f6;
+}
+
+.rich-text-display code {
+  background-color: #374151;
+  color: #f3f4f6;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+}
+
+.rich-text-display pre code {
+  background: none;
+  padding: 0;
+}
+
+.rich-text-display table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 16px 0;
+  background: #1f2937;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.rich-text-display table th,
+.rich-text-display table td {
+  border: 1px solid #4b5563;
+  padding: 12px;
+  text-align: left;
+}
+
+.rich-text-display table th {
+  background-color: #374151;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.rich-text-display table td {
+  color: #e5e7eb;
+}
+
+.rich-text-display table tr:nth-child(even) {
+  background-color: #111827;
+}
+
+.rich-text-display a {
+  color: #3b82f6;
+  text-decoration: underline;
+}
+
+.rich-text-display a:hover {
+  color: #60a5fa;
+}
+
+.rich-text-display img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  margin: 16px 0;
+}
+
+.rich-text-display video {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  margin: 16px 0;
+}
+
+/* QA-specific content styling */
+.rich-text-display .qa-test-case {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid #22c55e;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 16px 0;
+}
+
+.rich-text-display .qa-bug-report {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid #ef4444;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 16px 0;
+}
+
+.rich-text-display .qa-checklist {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid #3b82f6;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 16px 0;
+}
+
+.rich-text-display .qa-checklist li {
+  list-style: none;
+  position: relative;
+  padding-left: 24px;
+}
+
+.rich-text-display .qa-checklist li:before {
+  content: "☐";
+  position: absolute;
+  left: 0;
+  color: #3b82f6;
+} 

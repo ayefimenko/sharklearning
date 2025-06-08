@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
+import RichTextDisplay from '../components/RichTextDisplay';
 
 interface Course {
   id: number;
@@ -206,24 +207,7 @@ const CourseDetail: React.FC = () => {
     return level.charAt(0).toUpperCase() + level.slice(1);
   };
 
-  const formatContent = (content: string) => {
-    // Simple markdown-like formatting
-    return content
-      .replace(/^# (.*$)/gim, '<h1 class="text-3xl font-bold text-gray-900 mb-4">$1</h1>')
-      .replace(/^## (.*$)/gim, '<h2 class="text-2xl font-semibold text-gray-800 mb-3 mt-6">$1</h2>')
-      .replace(/^### (.*$)/gim, '<h3 class="text-xl font-semibold text-gray-700 mb-2 mt-4">$1</h3>')
-      .replace(/^\* (.*$)/gim, '<li class="mb-1">$1</li>')
-      .replace(/^- (.*$)/gim, '<li class="mb-1">$1</li>')
-      .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold">$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em class="italic">$1</em>')
-      .replace(/```([^`]*?)```/gs, '<pre class="bg-gray-100 p-4 rounded-lg overflow-x-auto my-4"><code>$1</code></pre>')
-      .replace(/`([^`]*?)`/g, '<code class="bg-gray-100 px-2 py-1 rounded text-sm">$1</code>')
-      .replace(/\n\n/g, '</p><p class="mb-4">')
-      .replace(/^\|(.+)\|$/gm, (match) => {
-        const cells = match.split('|').slice(1, -1).map(cell => cell.trim());
-        return `<tr>${cells.map(cell => `<td class="border border-gray-300 px-4 py-2">${cell}</td>`).join('')}</tr>`;
-      });
-  };
+
 
   const currentCourse = track?.courses[currentCourseIndex];
   
@@ -417,11 +401,9 @@ const CourseDetail: React.FC = () => {
               {/* Course Content */}
               {showContent && (
                 <div className="p-6">
-                  <div 
+                  <RichTextDisplay 
+                    content={currentCourse.content}
                     className="prose prose-lg max-w-none"
-                    dangerouslySetInnerHTML={{ 
-                      __html: `<div class="leading-relaxed">${formatContent(currentCourse.content)}</div>` 
-                    }}
                   />
                 </div>
               )}
