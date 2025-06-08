@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User, Bell, Shield, Palette, Globe, Download, Trash2, Save, Eye, EyeOff } from 'lucide-react';
-import { useAuthStore } from '@/stores/authStore';
+import { useAuthStore } from '../stores/authStore';
 import { toast } from 'react-hot-toast';
 
 interface SettingsSection {

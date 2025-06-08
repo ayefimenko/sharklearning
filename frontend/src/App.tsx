@@ -2,18 +2,18 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from 'react-query';
 import { Toaster } from 'react-hot-toast';
-import { useAuthStore } from '@/stores/authStore';
-import Layout from '@/components/Layout';
-import Dashboard from '@/pages/Dashboard';
-import Login from '@/pages/Login';
-import Register from '@/pages/Register';
-import Courses from '@/pages/Courses';
-import CourseDetail from '@/pages/CourseDetail';
-import Quiz from '@/pages/Quiz';
-import Profile from '@/pages/Profile';
-import Settings from '@/pages/Settings';
-import Admin from '@/pages/Admin';
-import LearningPaths from '@/pages/LearningPaths';
+import { useAuthStore } from './stores/authStore';
+import Layout from './components/Layout';
+import Dashboard from './pages/Dashboard';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import Courses from './pages/Courses';
+import CourseDetail from './pages/CourseDetail';
+import Quiz from './pages/Quiz';
+import Profile from './pages/Profile';
+import Settings from './pages/Settings';
+import Admin from './pages/Admin';
+import LearningPaths from './pages/LearningPaths';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -27,7 +27,27 @@ const queryClient = new QueryClient({
 });
 
 function App() {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore();
+  const [isLoading, setIsLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    // Add a small delay to check auth state
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading SharkLearning...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <QueryClientProvider client={queryClient}>
