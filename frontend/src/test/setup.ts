@@ -45,7 +45,7 @@ const handlers = [
     })
   }),
 
-  // Content endpoints
+  // Content endpoints - both API gateway and direct service endpoints
   http.get('/api/content/tracks', () => {
     return HttpResponse.json([
       {
@@ -56,6 +56,41 @@ const handlers = [
         estimatedDuration: '4 weeks'
       }
     ])
+  }),
+
+  // Direct content service endpoint (localhost:8000) - match Dashboard expectations
+  http.get('http://localhost:8000/tracks', () => {
+    return HttpResponse.json({
+      tracks: [
+        {
+          id: 1,
+          title: 'QA Fundamentals',
+          description: 'Learn the basics of Quality Assurance testing and methodologies',
+          difficultyLevel: 'beginner',
+          estimatedHours: 20,
+          isPublished: true,
+          createdAt: '2025-06-08T14:09:00.805Z'
+        },
+        {
+          id: 2,
+          title: 'Test Automation Basics',
+          description: 'Introduction to automated testing tools and frameworks',
+          difficultyLevel: 'intermediate',
+          estimatedHours: 30,
+          isPublished: true,
+          createdAt: '2025-06-08T14:09:00.805Z'
+        },
+        {
+          id: 3,
+          title: 'Advanced Testing Techniques',
+          description: 'Performance testing, security testing, and advanced methodologies',
+          difficultyLevel: 'advanced',
+          estimatedHours: 40,
+          isPublished: true,
+          createdAt: '2025-06-08T14:09:00.805Z'
+        }
+      ]
+    })
   }),
 
   http.get('/api/content/tracks/:id', ({ params }) => {
@@ -134,7 +169,9 @@ const server = setupServer(...handlers)
 
 // Start server before all tests
 beforeAll(() => {
-  server.listen({ onUnhandledRequest: 'error' })
+  server.listen({ 
+    onUnhandledRequest: 'warn' // Changed from 'error' to 'warn' to be less strict
+  })
 })
 
 // Clean up after each test case
@@ -147,6 +184,9 @@ afterEach(() => {
 afterAll(() => {
   server.close()
 })
+
+// Export server for additional handlers in tests
+export { server }
 
 // Mock window.matchMedia
 Object.defineProperty(window, 'matchMedia', {

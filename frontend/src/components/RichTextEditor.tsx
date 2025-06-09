@@ -3,6 +3,7 @@ import ReactQuill, { Quill } from 'react-quill';
 // @ts-ignore - No type definitions available for quill-better-table
 import QuillBetterTable from 'quill-better-table';
 import 'react-quill/dist/quill.snow.css';
+import Prism from 'prismjs';
 import 'prismjs/themes/prism.css';
 import 'prismjs/components/prism-javascript';
 import 'prismjs/components/prism-typescript';
@@ -142,10 +143,12 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       syntax: {
         highlight: (text: string) => {
           // Simple syntax highlighting for code blocks
-          if (typeof window !== 'undefined' && (window as any).Prism) {
-            return (window as any).Prism.highlight(text, (window as any).Prism.languages.javascript, 'javascript');
+          try {
+            return Prism.highlight(text, Prism.languages.javascript, 'javascript');
+          } catch (error) {
+            console.warn('Prism highlighting failed:', error);
+            return text;
           }
-          return text;
         }
       }
     };

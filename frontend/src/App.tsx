@@ -42,8 +42,11 @@ function App() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading SharkLearning...</p>
+          <h1 className="text-4xl font-bold text-purple-600 mb-4">SharkLearning</h1>
+          <p className="text-gray-600">Loading application...</p>
+          <div className="mt-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+          </div>
         </div>
       </div>
     );
@@ -53,6 +56,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <Router>
         <div className="min-h-screen bg-gray-50">
+          <Toaster position="top-right" />
           <Routes>
             {/* Public routes */}
             <Route 
@@ -65,8 +69,8 @@ function App() {
             />
             
             {/* Protected routes */}
-            <Route
-              path="/*"
+            <Route 
+              path="/*" 
               element={
                 isAuthenticated ? (
                   <Layout>
@@ -74,46 +78,22 @@ function App() {
                       <Route path="/dashboard" element={<Dashboard />} />
                       <Route path="/courses" element={<Courses />} />
                       <Route path="/courses/:id" element={<CourseDetail />} />
-                      <Route path="/quiz/:quizId" element={<Quiz />} />
+                      <Route path="/quiz/:courseId" element={<Quiz />} />
                       <Route path="/learning-paths" element={<LearningPaths />} />
                       <Route path="/profile" element={<Profile />} />
                       <Route path="/settings" element={<Settings />} />
-                      <Route path="/admin" element={<Admin />} />
+                      {user?.role === 'admin' && (
+                        <Route path="/admin" element={<Admin />} />
+                      )}
                       <Route path="/" element={<Navigate to="/dashboard" />} />
                     </Routes>
                   </Layout>
                 ) : (
                   <Navigate to="/login" />
                 )
-              }
+              } 
             />
           </Routes>
-          
-          {/* Toast notifications */}
-          <Toaster
-            position="top-right"
-            toastOptions={{
-              duration: 4000,
-              style: {
-                background: '#363636',
-                color: '#fff',
-              },
-              success: {
-                duration: 3000,
-                iconTheme: {
-                  primary: '#10b981',
-                  secondary: '#fff',
-                },
-              },
-              error: {
-                duration: 5000,
-                iconTheme: {
-                  primary: '#ef4444',
-                  secondary: '#fff',
-                },
-              },
-            }}
-          />
         </div>
       </Router>
     </QueryClientProvider>

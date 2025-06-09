@@ -14,7 +14,7 @@ services:
       - ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
       - JWT_SECRET=your-super-secret-jwt-key
       - USER_SERVICE_URL=http://user-service:3001
-      - CONTENT_SERVICE_URL=http://content-service:3011
+      - CONTENT_SERVICE_URL=http://content-service:8000
       - PROGRESS_SERVICE_URL=http://progress-service:3021
     depends_on:
       - user-service
@@ -68,10 +68,10 @@ services:
       context: ./services/content-service
       dockerfile: Dockerfile
     ports:
-      - "3011:3011"
+      - "8000:8000"
     environment:
       - NODE_ENV=development
-      - PORT=3011
+      - PORT=8000
       - DATABASE_URL=postgresql://sharklearning:password@postgres-courses:5432/sharklearning_courses
       - REDIS_URL=redis://redis:6379
       - USER_SERVICE_URL=http://user-service:3001
@@ -103,7 +103,7 @@ services:
       - DATABASE_URL=postgresql://sharklearning:password@postgres-learning:5432/sharklearning_learning
       - REDIS_URL=redis://redis:6379
       - USER_SERVICE_URL=http://user-service:3001
-      - CONTENT_SERVICE_URL=http://content-service:3011
+      - CONTENT_SERVICE_URL=http://content-service:8000
     depends_on:
       - postgres-learning
       - redis
