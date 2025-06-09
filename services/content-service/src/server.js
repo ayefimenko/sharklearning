@@ -166,7 +166,7 @@ app.get('/courses', async (req, res) => {
   }
 });
 
-// Get single course
+// Get single course with lessons
 app.get('/courses/:id', async (req, res) => {
   try {
     const courseId = parseInt(req.params.id);
@@ -187,7 +187,27 @@ app.get('/courses/:id', async (req, res) => {
       return res.status(404).json({ error: 'Course not found' });
     }
 
+    // Get lessons for this course
+    const lessonsResult = await pool.query(`
+      SELECT id, title, content, order_index, lesson_type, duration_minutes, is_published, created_at, updated_at
+      FROM lessons
+      WHERE course_id = $1 AND is_published = true
+      ORDER BY order_index
+    `, [courseId]);
+
     const course = result.rows[0];
+    const lessons = lessonsResult.rows.map(lesson => ({
+      id: lesson.id,
+      title: lesson.title,
+      content: lesson.content,
+      orderIndex: lesson.order_index,
+      lessonType: lesson.lesson_type,
+      durationMinutes: lesson.duration_minutes,
+      isPublished: lesson.is_published,
+      createdAt: lesson.created_at,
+      updatedAt: lesson.updated_at
+    }));
+
     res.json({
       id: course.id,
       title: course.title,
@@ -198,10 +218,132 @@ app.get('/courses/:id', async (req, res) => {
       estimatedDuration: '2 hours',
       isPublished: course.is_published,
       createdAt: course.created_at,
-      updatedAt: course.updated_at
+      updatedAt: course.updated_at,
+      lessons: lessons
     });
   } catch (error) {
     console.error('Course fetch error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get lessons for a specific course
+app.get('/courses/:id/lessons', async (req, res) => {
+  try {
+    const courseId = parseInt(req.params.id);
+    
+    if (isNaN(courseId)) {
+      return res.status(400).json({ error: 'Invalid course ID' });
+    }
+
+    const result = await pool.query(`
+      SELECT id, title, content, order_index, lesson_type, duration_minutes, is_published, created_at, updated_at
+      FROM lessons
+      WHERE course_id = $1 AND is_published = true
+      ORDER BY order_index
+    `, [courseId]);
+
+    const lessons = result.rows.map(lesson => ({
+      id: lesson.id,
+      title: lesson.title,
+      content: lesson.content,
+      orderIndex: lesson.order_index,
+      lessonType: lesson.lesson_type,
+      durationMinutes: lesson.duration_minutes,
+      isPublished: lesson.is_published,
+      createdAt: lesson.created_at,
+      updatedAt: lesson.updated_at
+    }));
+
+    res.json({ lessons });
+  } catch (error) {
+    console.error('Lessons fetch error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get single lesson
+app.get('/lessons/:id', async (req, res) => {
+  try {
+    const lessonId = parseInt(req.params.id);
+    
+    if (isNaN(lessonId)) {
+      return res.status(400).json({ error: 'Invalid lesson ID' });
+    }
+
+    const result = await pool.query(`
+      SELECT l.id, l.title, l.content, l.order_index, l.lesson_type, l.duration_minutes, l.is_published, l.created_at, l.updated_at,
+             c.id as course_id, c.title as course_title, c.track_id,
+             t.title as track_title
+      FROM lessons l
+      JOIN courses c ON l.course_id = c.id
+      JOIN learning_tracks t ON c.track_id = t.id
+      WHERE l.id = $1
+    `, [lessonId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Lesson not found' });
+    }
+
+    const lesson = result.rows[0];
+    
+    // Get quiz if this is a quiz lesson
+    let quiz = null;
+    if (lesson.lesson_type === 'quiz') {
+      const quizResult = await pool.query(`
+        SELECT q.id, q.title, q.description, q.time_limit_minutes, q.passing_score, q.max_attempts
+        FROM quizzes q
+        WHERE q.lesson_id = $1 AND q.is_published = true
+      `, [lessonId]);
+
+      if (quizResult.rows.length > 0) {
+        const quizData = quizResult.rows[0];
+        
+        // Get quiz questions
+        const questionsResult = await pool.query(`
+          SELECT id, question_text, question_type, answer_options, points, order_index
+          FROM quiz_questions
+          WHERE quiz_id = $1
+          ORDER BY order_index
+        `, [quizData.id]);
+
+        quiz = {
+          id: quizData.id,
+          title: quizData.title,
+          description: quizData.description,
+          timeLimitMinutes: quizData.time_limit_minutes,
+          passingScore: quizData.passing_score,
+          maxAttempts: quizData.max_attempts,
+          questions: questionsResult.rows.map(q => ({
+            id: q.id,
+            questionText: q.question_text,
+            questionType: q.question_type,
+            answerOptions: q.answer_options,
+            points: q.points,
+            orderIndex: q.order_index
+          }))
+        };
+      }
+    }
+
+    res.json({
+      id: lesson.id,
+      title: lesson.title,
+      content: lesson.content,
+      orderIndex: lesson.order_index,
+      lessonType: lesson.lesson_type,
+      durationMinutes: lesson.duration_minutes,
+      isPublished: lesson.is_published,
+      createdAt: lesson.created_at,
+      updatedAt: lesson.updated_at,
+      courseId: lesson.course_id,
+      courseTitle: lesson.course_title,
+      trackId: lesson.track_id,
+      trackTitle: lesson.track_title,
+      quiz: quiz
+    });
+  } catch (error) {
+    console.error('Lesson fetch error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

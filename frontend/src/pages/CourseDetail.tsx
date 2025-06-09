@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import RichTextDisplay from '../components/RichTextDisplay';
+import LessonViewer from '../components/LessonViewer';
 
 interface Course {
   id: number;
@@ -48,6 +49,7 @@ const CourseDetail: React.FC = () => {
   const [showContent, setShowContent] = useState(false);
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [loadingQuizzes, setLoadingQuizzes] = useState(false);
+  const [showLessons, setShowLessons] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -384,18 +386,35 @@ const CourseDetail: React.FC = () => {
                 </div>
                 <p className="text-gray-600 mb-4">{currentCourse.description}</p>
                 
-                <button
-                  onClick={() => {
-                    setShowContent(!showContent);
-                    if (!showContent && currentCourse && courseProgress[currentCourse.id] === 0) {
-                      // Mark as started (25% progress)
-                      updateCourseProgress(currentCourse.id, 25);
-                    }
-                  }}
-                  className="btn-primary"
-                >
-                  {showContent ? 'Hide Content' : completedCourses.has(currentCourse?.id || 0) ? 'Review Content' : 'Start Learning'}
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowContent(!showContent);
+                      setShowLessons(false);
+                      if (!showContent && currentCourse && courseProgress[currentCourse.id] === 0) {
+                        // Mark as started (25% progress)
+                        updateCourseProgress(currentCourse.id, 25);
+                      }
+                    }}
+                    className="btn-secondary"
+                  >
+                    {showContent ? 'Hide Overview' : 'Course Overview'}
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      setShowLessons(!showLessons);
+                      setShowContent(false);
+                      if (!showLessons && currentCourse && courseProgress[currentCourse.id] === 0) {
+                        // Mark as started (25% progress)
+                        updateCourseProgress(currentCourse.id, 25);
+                      }
+                    }}
+                    className="btn-primary"
+                  >
+                    {showLessons ? 'Hide Lessons' : completedCourses.has(currentCourse?.id || 0) ? 'Continue Learning' : 'Start Learning'}
+                  </button>
+                </div>
               </div>
 
               {/* Course Content */}
@@ -404,6 +423,23 @@ const CourseDetail: React.FC = () => {
                   <RichTextDisplay 
                     content={currentCourse.content}
                     className="prose prose-lg max-w-none"
+                  />
+                </div>
+              )}
+
+              {/* Lesson Viewer */}
+              {showLessons && currentCourse && (
+                <div className="p-6">
+                  <LessonViewer 
+                    courseId={currentCourse.id}
+                    courseName={currentCourse.title}
+                    onProgressUpdate={(progress) => {
+                      if (progress === 100) {
+                        updateCourseProgress(currentCourse.id, 100, true);
+                      } else {
+                        updateCourseProgress(currentCourse.id, Math.max(25, progress));
+                      }
+                    }}
                   />
                 </div>
               )}
