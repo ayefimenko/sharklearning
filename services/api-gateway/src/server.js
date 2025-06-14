@@ -52,7 +52,7 @@ app.get('/health', (req, res) => {
 // Service routes with proxy
 const services = {
   '/api/users': {
-    target: process.env.USER_SERVICE_URL || 'http://user-service:8000',
+    target: process.env.USER_SERVICE_URL || 'http://user-service:3001',
     pathRewrite: { '^/api/users': '' }
   },
   '/api/content': {
@@ -60,7 +60,7 @@ const services = {
     pathRewrite: { '^/api/content': '' }
   },
   '/api/progress': {
-    target: process.env.PROGRESS_SERVICE_URL || 'http://progress-service:8000',
+    target: process.env.PROGRESS_SERVICE_URL || 'http://progress-service:3021',
     pathRewrite: { '^/api/progress': '' }
   },
   '/api/notifications': {

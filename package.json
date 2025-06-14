@@ -10,19 +10,27 @@
     "shared"
   ],
   "scripts": {
-    "dev": "docker-compose up -d",
-    "dev:down": "docker-compose down",
+    "dev": "./scripts/dev-start.sh",
+    "dev:down": "docker-compose down --volumes --remove-orphans",
     "dev:logs": "docker-compose logs -f",
     "dev:build": "docker-compose build",
+    "dev:restart": "docker-compose restart",
+    "health": "./scripts/health-check.sh",
+    "validate": "./scripts/validate-config.sh",
+    "db:seed": "docker exec -i sharklearning-postgres-courses-1 psql -U sharklearning -d sharklearning_courses < database/init-scripts/courses/init-content-service.sql",
+    "db:reset": "docker-compose down --volumes && docker-compose up -d && sleep 30 && npm run db:seed",
     "test": "npm run test --workspaces",
     "test:unit": "npm run test:unit --workspaces",
     "test:integration": "npm run test:integration --workspaces",
     "lint": "npm run lint --workspaces",
     "lint:fix": "npm run lint:fix --workspaces",
     "clean": "docker-compose down -v && docker system prune -f",
-    "setup": "npm install && npm run dev:build",
-    "start:services": "npm run start --workspace=services/api-gateway & npm run start --workspace=services/user-service & npm run start --workspace=services/content-service & npm run start --workspace=services/progress-service & npm run start --workspace=services/notification-service",
-    "kill:services": "pkill -f 'node.*services'"
+    "setup": "npm install && npm run validate && npm run dev",
+    "logs:api": "docker logs sharklearning-api-gateway-1 -f",
+    "logs:user": "docker logs sharklearning-user-service-1 -f",
+    "logs:content": "docker logs sharklearning-content-service-1 -f",
+    "logs:progress": "docker logs sharklearning-progress-service-1 -f",
+    "logs:frontend": "docker logs sharklearning-frontend-1 -f"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
