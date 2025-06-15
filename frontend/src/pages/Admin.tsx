@@ -10,6 +10,7 @@ import {
   MagnifyingGlassIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
+import { apiClient } from '../utils/api';
 import { useAuthStore } from '../stores/authStore';
 import RichTextEditor from '../components/RichTextEditor';
 
@@ -36,6 +37,33 @@ interface Course {
   updatedAt: string;
 }
 
+interface User {
+  id: number;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+  isActive: boolean;
+  profileImage?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface LearningPath {
+  id: number;
+  title: string;
+  description: string;
+  difficultyLevel: string;
+  estimatedHours: number;
+  isPublished: boolean;
+  courseCount: number;
+  enrolledUsers: number;
+  avgProgress: string;
+  createdAt: string;
+  updatedAt: string;
+  courses: Course[];
+}
+
 interface ContentTemplate {
   id: string;
   name: string;
@@ -44,17 +72,23 @@ interface ContentTemplate {
   sections: string[];
 }
 
+type AdminTab = 'users' | 'courses' | 'paths' | 'tracks';
 type ContentType = 'tracks' | 'courses';
 type ContentStatus = 'all' | 'published' | 'draft';
+type UserStatus = 'all' | 'active' | 'inactive';
+type UserRole = 'all' | 'admin' | 'instructor' | 'student';
 
 const Admin: React.FC = () => {
-  const { user, token } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<ContentType>('courses');
+  const { user, token, isAuthenticated } = useAuthStore();
+  
+  const [activeTab, setActiveTab] = useState<AdminTab>('tracks');
   const [tracks, setTracks] = useState<Track[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [paths, setPaths] = useState<LearningPath[]>([]);
   const [templates, setTemplates] = useState<ContentTemplate[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string>('');
   
   // Filters and search
   const [statusFilter, setStatusFilter] = useState<ContentStatus>('all');
@@ -81,34 +115,34 @@ const Admin: React.FC = () => {
 
   // Check admin permissions
   useEffect(() => {
-    if (!user || user.role !== 'admin') {
+    if (isAuthenticated && user?.role === 'admin' && token) {
+      apiClient.setToken(token);
+      fetchContent();
+      fetchTemplates();
+    } else if (!isAuthenticated) {
+      setError('Authentication required');
+    } else if (user?.role !== 'admin') {
       setError('Admin access required');
-      return;
     }
-    fetchContent();
-    fetchTemplates();
-  }, [user, token]);
+  }, [isAuthenticated, user, token]);
+
+  useEffect(() => {
+    if (user?.role === 'admin' && token) {
+      fetchContent();
+    }
+  }, [activeTab, statusFilter, user, token]);
 
   const fetchContent = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:8000/api/content/admin/content?type=${activeTab}&status=${statusFilter}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch content');
-      }
-
-      const data = await response.json();
+      setError('');
       
-      if (data.content.tracks) {
-        setTracks(data.content.tracks);
-      }
-      if (data.content.courses) {
-        setCourses(data.content.courses);
+      if (activeTab === 'tracks') {
+        const data = await apiClient.getContent('tracks', statusFilter) as { content: { tracks: Track[] } };
+        setTracks(data.content?.tracks || []);
+      } else if (activeTab === 'courses') {
+        const data = await apiClient.getContent('courses', statusFilter) as { content: { courses: Course[] } };
+        setCourses(data.content?.courses || []);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch content');
@@ -119,16 +153,8 @@ const Admin: React.FC = () => {
 
   const fetchTemplates = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/content/admin/templates', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setTemplates(data.templates);
-      }
+      const data = await apiClient.getTemplates() as { templates: ContentTemplate[] };
+      setTemplates(data.templates || []);
     } catch (err) {
       console.error('Failed to fetch templates:', err);
     }
@@ -138,33 +164,21 @@ const Admin: React.FC = () => {
     e.preventDefault();
     
     try {
-      const endpoint = activeTab === 'tracks' ? '/tracks' : '/courses';
-      const payload = activeTab === 'tracks' 
-        ? {
-            title: formData.title,
-            description: formData.description,
-            difficultyLevel: formData.difficultyLevel,
-            estimatedHours: formData.estimatedHours
-          }
-        : {
-            title: formData.title,
-            description: formData.description,
-            content: formData.content,
-            trackId: formData.trackId,
-            orderIndex: formData.orderIndex
-          };
-
-      const response = await fetch(`http://localhost:8000/api/content${endpoint}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to create content');
+      if (activeTab === 'tracks') {
+        await apiClient.createTrack({
+          title: formData.title,
+          description: formData.description,
+          difficultyLevel: formData.difficultyLevel,
+          estimatedHours: formData.estimatedHours
+        });
+      } else {
+        await apiClient.createCourse({
+          title: formData.title,
+          description: formData.description,
+          content: formData.content,
+          trackId: formData.trackId,
+          orderIndex: formData.orderIndex
+        });
       }
 
       setShowCreateModal(false);
@@ -181,34 +195,22 @@ const Admin: React.FC = () => {
     if (!editingItem) return;
 
     try {
-      const endpoint = activeTab === 'tracks' ? `/tracks/${editingItem.id}` : `/courses/${editingItem.id}`;
-      const payload = activeTab === 'tracks' 
-        ? {
-            title: formData.title,
-            description: formData.description,
-            difficultyLevel: formData.difficultyLevel,
-            estimatedHours: formData.estimatedHours,
-            isPublished: formData.isPublished
-          }
-        : {
-            title: formData.title,
-            description: formData.description,
-            content: formData.content,
-            orderIndex: formData.orderIndex,
-            isPublished: formData.isPublished
-          };
-
-      const response = await fetch(`http://localhost:8000/api/content${endpoint}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update content');
+      if (activeTab === 'tracks') {
+        await apiClient.updateTrack(editingItem.id, {
+          title: formData.title,
+          description: formData.description,
+          difficultyLevel: formData.difficultyLevel,
+          estimatedHours: formData.estimatedHours,
+          isPublished: formData.isPublished
+        });
+      } else {
+        await apiClient.updateCourse(editingItem.id, {
+          title: formData.title,
+          description: formData.description,
+          content: formData.content,
+          orderIndex: formData.orderIndex,
+          isPublished: formData.isPublished
+        });
       }
 
       setShowEditModal(false);
@@ -224,16 +226,10 @@ const Admin: React.FC = () => {
     if (!confirm('Are you sure you want to delete this item?')) return;
 
     try {
-      const endpoint = activeTab === 'tracks' ? `/tracks/${id}` : `/courses/${id}`;
-      const response = await fetch(`http://localhost:8000/api/content${endpoint}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete content');
+      if (activeTab === 'tracks') {
+        await apiClient.deleteTrack(id);
+      } else {
+        await apiClient.deleteCourse(id);
       }
 
       fetchContent();
@@ -250,23 +246,7 @@ const Admin: React.FC = () => {
     }
 
     try {
-      const response = await fetch('http://localhost:8000/api/content/admin/content/bulk', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          operation,
-          type: activeTab,
-          ids: selectedItems
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to perform bulk operation');
-      }
-
+      await apiClient.bulkOperation(activeTab, operation, selectedItems);
       setSelectedItems([]);
       fetchContent();
     } catch (err) {
@@ -280,10 +260,10 @@ const Admin: React.FC = () => {
       title: item.title,
       description: item.description,
       content: 'content' in item ? item.content : '',
-      difficultyLevel: 'difficultyLevel' in item ? item.difficultyLevel : 'beginner',
-      estimatedHours: 'estimatedHours' in item ? item.estimatedHours : 1,
-      orderIndex: 'orderIndex' in item ? item.orderIndex : 0,
-      trackId: 'trackId' in item ? item.trackId : 0,
+      difficultyLevel: 'difficultyLevel' in item ? (item as Track).difficultyLevel : 'beginner',
+      estimatedHours: 'estimatedHours' in item ? (item as Track).estimatedHours : 1,
+      orderIndex: 'orderIndex' in item ? (item as Course).orderIndex : 0,
+      trackId: 'trackId' in item ? (item as Course).trackId : 0,
       isPublished: item.isPublished
     });
     setShowEditModal(true);
@@ -346,6 +326,11 @@ const Admin: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-violet-900">
+      {/* INDICATOR FOR WRONG COMPONENT */}
+      <div className="bg-red-500 text-white text-center py-4 text-2xl font-bold">
+        ❌ WRONG COMPONENT! This is Admin.tsx (Content Management Only) ❌
+      </div>
+      
       <div className="container mx-auto px-6 py-8">
         {/* Header */}
         <div className="mb-8">
@@ -358,7 +343,7 @@ const Admin: React.FC = () => {
           <div className="mb-6 bg-red-500/10 border border-red-500 rounded-lg p-4">
             <p className="text-red-400">{error}</p>
             <button 
-              onClick={() => setError(null)}
+              onClick={() => setError('')}
               className="text-red-300 hover:text-red-200 mt-2 text-sm underline"
             >
               Dismiss

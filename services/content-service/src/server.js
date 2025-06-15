@@ -353,7 +353,10 @@ app.post('/tracks', authenticateToken, [
   body('title').trim().isLength({ min: 1, max: 255 }),
   body('description').optional().trim(),
   body('difficultyLevel').isIn(['beginner', 'intermediate', 'advanced']),
-  body('estimatedHours').isInt({ min: 1 })
+  body('estimatedHours').isInt({ min: 1 }),
+  body('prerequisites').optional().isArray(),
+  body('tags').optional().isArray(),
+  body('category').optional().trim()
 ], async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
@@ -365,10 +368,21 @@ app.post('/tracks', authenticateToken, [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { title, description, difficultyLevel, estimatedHours } = req.body;
+    const { 
+      title, 
+      description, 
+      difficultyLevel, 
+      estimatedHours, 
+      prerequisites = [], 
+      tags = [], 
+      category = 'General' 
+    } = req.body;
 
+    // First, let's check if we need to add the new columns to the database
+    // This will be handled by migration scripts in production
     const result = await pool.query(
-      'INSERT INTO learning_tracks (title, description, difficulty_level, estimated_hours) VALUES ($1, $2, $3, $4) RETURNING *',
+      `INSERT INTO learning_tracks (title, description, difficulty_level, estimated_hours) 
+       VALUES ($1, $2, $3, $4) RETURNING *`,
       [title, description, difficultyLevel, estimatedHours]
     );
 
@@ -382,11 +396,443 @@ app.post('/tracks', authenticateToken, [
         difficultyLevel: track.difficulty_level,
         estimatedHours: track.estimated_hours,
         isPublished: track.is_published,
+        prerequisites: prerequisites,
+        tags: tags,
+        category: category,
         createdAt: track.created_at
       }
     });
   } catch (error) {
     console.error('Track creation error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get learning path structure with courses (admin only)
+app.get('/admin/paths', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { category, difficulty, status = 'all' } = req.query;
+
+    let whereConditions = [];
+    let queryParams = [];
+    let paramCount = 1;
+
+    if (category && category !== 'all') {
+      whereConditions.push(`t.title ILIKE $${paramCount}`);
+      queryParams.push(`%${category}%`);
+      paramCount++;
+    }
+
+    if (difficulty && difficulty !== 'all') {
+      whereConditions.push(`t.difficulty_level = $${paramCount}`);
+      queryParams.push(difficulty);
+      paramCount++;
+    }
+
+    if (status !== 'all') {
+      whereConditions.push(`t.is_published = $${paramCount}`);
+      queryParams.push(status === 'published');
+      paramCount++;
+    }
+
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
+    // Get tracks with course counts and enrollment stats
+    const tracksQuery = `
+      SELECT t.id, t.title, t.description, t.difficulty_level, t.estimated_hours, 
+             t.is_published, t.created_at, t.updated_at,
+             COUNT(DISTINCT c.id) as course_count,
+             COUNT(DISTINCT up.user_id) as enrolled_users,
+             COALESCE(AVG(up.progress_percentage), 0) as avg_progress
+      FROM learning_tracks t
+      LEFT JOIN courses c ON t.id = c.track_id
+      LEFT JOIN user_progress up ON t.id = up.track_id
+      ${whereClause}
+      GROUP BY t.id, t.title, t.description, t.difficulty_level, t.estimated_hours, 
+               t.is_published, t.created_at, t.updated_at
+      ORDER BY t.created_at DESC
+    `;
+
+    const tracksResult = await pool.query(tracksQuery, queryParams);
+
+    // Get detailed course information for each track
+    const pathsPromises = tracksResult.rows.map(async (track) => {
+      const coursesQuery = `
+        SELECT c.id, c.title, c.description, c.order_index, c.is_published, c.created_at,
+               COUNT(DISTINCT up.user_id) as enrolled_users,
+               COALESCE(AVG(up.progress_percentage), 0) as avg_progress
+        FROM courses c
+        LEFT JOIN user_progress up ON c.id = up.course_id
+        WHERE c.track_id = $1
+        GROUP BY c.id, c.title, c.description, c.order_index, c.is_published, c.created_at
+        ORDER BY c.order_index ASC
+      `;
+      
+      const coursesResult = await pool.query(coursesQuery, [track.id]);
+      
+      return {
+        id: track.id,
+        title: track.title,
+        description: track.description,
+        difficultyLevel: track.difficulty_level,
+        estimatedHours: track.estimated_hours,
+        isPublished: track.is_published,
+        courseCount: parseInt(track.course_count),
+        enrolledUsers: parseInt(track.enrolled_users),
+        avgProgress: parseFloat(track.avg_progress).toFixed(1),
+        createdAt: track.created_at,
+        updatedAt: track.updated_at,
+        courses: coursesResult.rows.map(course => ({
+          id: course.id,
+          title: course.title,
+          description: course.description,
+          orderIndex: course.order_index,
+          isPublished: course.is_published,
+          enrolledUsers: parseInt(course.enrolled_users),
+          avgProgress: parseFloat(course.avg_progress).toFixed(1),
+          createdAt: course.created_at
+        }))
+      };
+    });
+
+    const paths = await Promise.all(pathsPromises);
+
+    res.json({ paths });
+  } catch (error) {
+    console.error('Learning paths fetch error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Bulk path operations (admin only)
+app.post('/admin/paths/bulk', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { pathIds, operation, value } = req.body;
+
+    if (!pathIds || !Array.isArray(pathIds) || pathIds.length === 0) {
+      return res.status(400).json({ error: 'Path IDs array is required' });
+    }
+
+    if (!operation) {
+      return res.status(400).json({ error: 'Operation is required' });
+    }
+
+    let query;
+    let params;
+
+    switch (operation) {
+      case 'publish':
+        query = `UPDATE learning_tracks SET is_published = true, updated_at = CURRENT_TIMESTAMP WHERE id = ANY($1)`;
+        params = [pathIds];
+        break;
+      case 'unpublish':
+        query = `UPDATE learning_tracks SET is_published = false, updated_at = CURRENT_TIMESTAMP WHERE id = ANY($1)`;
+        params = [pathIds];
+        break;
+      case 'update_difficulty':
+        if (!value || !['beginner', 'intermediate', 'advanced'].includes(value)) {
+          return res.status(400).json({ error: 'Valid difficulty level is required' });
+        }
+        query = `UPDATE learning_tracks SET difficulty_level = $2, updated_at = CURRENT_TIMESTAMP WHERE id = ANY($1)`;
+        params = [pathIds, value];
+        break;
+      case 'delete':
+        // Begin transaction for bulk delete
+        await pool.query('BEGIN');
+        try {
+          // Delete related records first
+          await pool.query('DELETE FROM user_progress WHERE track_id = ANY($1)', [pathIds]);
+          await pool.query('DELETE FROM courses WHERE track_id = ANY($1)', [pathIds]);
+          await pool.query('DELETE FROM learning_tracks WHERE id = ANY($1)', [pathIds]);
+          await pool.query('COMMIT');
+        } catch (error) {
+          await pool.query('ROLLBACK');
+          throw error;
+        }
+        
+        res.json({ 
+          message: `Successfully deleted ${pathIds.length} learning paths`,
+          affectedPaths: pathIds.length 
+        });
+        return;
+      default:
+        return res.status(400).json({ error: 'Invalid operation. Supported: publish, unpublish, update_difficulty, delete' });
+    }
+
+    const result = await pool.query(query, params);
+
+    res.json({ 
+      message: `Successfully performed ${operation} on ${result.rowCount} learning paths`,
+      affectedPaths: result.rowCount 
+    });
+  } catch (error) {
+    console.error('Bulk path operation error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Reorder courses within a path (admin only)
+app.put('/admin/paths/:pathId/reorder', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { pathId } = req.params;
+    const { courseOrders } = req.body;
+
+    if (!courseOrders || !Array.isArray(courseOrders)) {
+      return res.status(400).json({ error: 'Course orders array is required' });
+    }
+
+    // Validate that all courses belong to this path
+    const courseIds = courseOrders.map(item => item.courseId);
+    const validationResult = await pool.query(
+      'SELECT id FROM courses WHERE id = ANY($1) AND track_id = $2',
+      [courseIds, pathId]
+    );
+
+    if (validationResult.rows.length !== courseIds.length) {
+      return res.status(400).json({ error: 'Some courses do not belong to this path' });
+    }
+
+    // Begin transaction
+    await pool.query('BEGIN');
+
+    try {
+      // Update each course's order
+      for (const { courseId, orderIndex } of courseOrders) {
+        await pool.query(
+          'UPDATE courses SET order_index = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [orderIndex, courseId]
+        );
+      }
+
+      await pool.query('COMMIT');
+
+      res.json({ message: 'Course order updated successfully' });
+    } catch (error) {
+      await pool.query('ROLLBACK');
+      throw error;
+    }
+  } catch (error) {
+    console.error('Course reorder error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Copy/clone learning path (admin only)
+app.post('/admin/paths/:pathId/clone', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { pathId } = req.params;
+    const { title, description } = req.body;
+
+    if (!title) {
+      return res.status(400).json({ error: 'Title is required for cloned path' });
+    }
+
+    // Get original path
+    const originalPath = await pool.query(
+      'SELECT * FROM learning_tracks WHERE id = $1',
+      [pathId]
+    );
+
+    if (originalPath.rows.length === 0) {
+      return res.status(404).json({ error: 'Learning path not found' });
+    }
+
+    const path = originalPath.rows[0];
+
+    // Begin transaction
+    await pool.query('BEGIN');
+
+    try {
+      // Create new path
+      const newPathResult = await pool.query(
+        `INSERT INTO learning_tracks (title, description, difficulty_level, estimated_hours, is_published) 
+         VALUES ($1, $2, $3, $4, false) RETURNING id`,
+        [title, description || path.description, path.difficulty_level, path.estimated_hours]
+      );
+
+      const newPathId = newPathResult.rows[0].id;
+
+      // Get and clone all courses
+      const coursesResult = await pool.query(
+        'SELECT * FROM courses WHERE track_id = $1 ORDER BY order_index',
+        [pathId]
+      );
+
+      for (const course of coursesResult.rows) {
+        await pool.query(
+          `INSERT INTO courses (track_id, title, description, content, order_index, is_published) 
+           VALUES ($1, $2, $3, $4, $5, false)`,
+          [newPathId, course.title + ' (Copy)', course.description, course.content, course.order_index]
+        );
+      }
+
+      await pool.query('COMMIT');
+
+      res.status(201).json({
+        message: 'Learning path cloned successfully',
+        clonedPath: {
+          id: newPathId,
+          title: title,
+          originalPathId: pathId,
+          coursesCloned: coursesResult.rows.length
+        }
+      });
+    } catch (error) {
+      await pool.query('ROLLBACK');
+      throw error;
+    }
+  } catch (error) {
+    console.error('Path clone error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get learning path analytics (admin only)
+app.get('/admin/paths/:pathId/analytics', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { pathId } = req.params;
+    const { timeframe = '30d' } = req.query;
+
+    // Calculate date range
+    let dateFilter = '';
+    if (timeframe === '7d') {
+      dateFilter = "AND up.started_at >= NOW() - INTERVAL '7 days'";
+    } else if (timeframe === '30d') {
+      dateFilter = "AND up.started_at >= NOW() - INTERVAL '30 days'";
+    } else if (timeframe === '90d') {
+      dateFilter = "AND up.started_at >= NOW() - INTERVAL '90 days'";
+    }
+
+    // Get path analytics
+    const analyticsQueries = [
+      // Path basic info
+      pool.query('SELECT * FROM learning_tracks WHERE id = $1', [pathId]),
+      
+      // Enrollment stats
+      pool.query(`
+        SELECT 
+          COUNT(DISTINCT user_id) as total_enrollments,
+          COUNT(DISTINCT CASE WHEN is_completed = true THEN user_id END) as completions,
+          AVG(progress_percentage) as avg_progress
+        FROM user_progress 
+        WHERE track_id = $1
+      `, [pathId]),
+      
+      // Course-level progress
+      pool.query(`
+        SELECT 
+          c.id, c.title, c.order_index,
+          COUNT(DISTINCT up.user_id) as enrollments,
+          COUNT(DISTINCT CASE WHEN up.is_completed = true THEN up.user_id END) as completions,
+          AVG(up.progress_percentage) as avg_progress
+        FROM courses c
+        LEFT JOIN user_progress up ON c.id = up.course_id
+        WHERE c.track_id = $1
+        GROUP BY c.id, c.title, c.order_index
+        ORDER BY c.order_index
+      `, [pathId]),
+      
+      // Daily enrollment trends
+      pool.query(`
+        SELECT 
+          DATE(started_at) as date, 
+          COUNT(*) as new_enrollments
+        FROM user_progress 
+        WHERE track_id = $1 ${dateFilter}
+        GROUP BY DATE(started_at) 
+        ORDER BY date
+      `, [pathId]),
+      
+      // Completion time analytics
+      pool.query(`
+        SELECT 
+          AVG(EXTRACT(EPOCH FROM (completed_at - started_at))/3600) as avg_completion_hours,
+          MIN(EXTRACT(EPOCH FROM (completed_at - started_at))/3600) as min_completion_hours,
+          MAX(EXTRACT(EPOCH FROM (completed_at - started_at))/3600) as max_completion_hours
+        FROM user_progress 
+        WHERE track_id = $1 AND is_completed = true AND completed_at IS NOT NULL
+      `, [pathId])
+    ];
+
+    const [
+      pathResult,
+      enrollmentResult,
+      courseProgressResult,
+      dailyTrendsResult,
+      completionTimeResult
+    ] = await Promise.all(analyticsQueries);
+
+    if (pathResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Learning path not found' });
+    }
+
+    const path = pathResult.rows[0];
+    const enrollmentStats = enrollmentResult.rows[0];
+    const completionStats = completionTimeResult.rows[0];
+
+    const analytics = {
+      path: {
+        id: path.id,
+        title: path.title,
+        description: path.description,
+        difficultyLevel: path.difficulty_level,
+        estimatedHours: path.estimated_hours,
+        isPublished: path.is_published
+      },
+      summary: {
+        totalEnrollments: parseInt(enrollmentStats.total_enrollments) || 0,
+        completions: parseInt(enrollmentStats.completions) || 0,
+        completionRate: enrollmentStats.total_enrollments > 0 
+          ? ((enrollmentStats.completions / enrollmentStats.total_enrollments) * 100).toFixed(1)
+          : '0.0',
+        avgProgress: parseFloat(enrollmentStats.avg_progress || 0).toFixed(1),
+        avgCompletionTime: completionStats.avg_completion_hours 
+          ? parseFloat(completionStats.avg_completion_hours).toFixed(1) + ' hours'
+          : 'N/A'
+      },
+      courseBreakdown: courseProgressResult.rows.map(course => ({
+        id: course.id,
+        title: course.title,
+        orderIndex: course.order_index,
+        enrollments: parseInt(course.enrollments) || 0,
+        completions: parseInt(course.completions) || 0,
+        completionRate: course.enrollments > 0 
+          ? ((course.completions / course.enrollments) * 100).toFixed(1)
+          : '0.0',
+        avgProgress: parseFloat(course.avg_progress || 0).toFixed(1)
+      })),
+      trends: {
+        dailyEnrollments: dailyTrendsResult.rows.map(row => ({
+          date: row.date,
+          enrollments: parseInt(row.new_enrollments)
+        }))
+      },
+      timeframe
+    };
+
+    res.json({ analytics });
+  } catch (error) {
+    console.error('Path analytics error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

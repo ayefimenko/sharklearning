@@ -13,6 +13,9 @@ import Quiz from './pages/Quiz';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import Admin from './pages/Admin';
+import AdminDashboard from './pages/AdminDashboard';
+import AdminTest from './pages/AdminTest';
+import SimpleAdminTest from './pages/SimpleAdminTest';
 import LearningPaths from './pages/LearningPaths';
 import './index.css';
 
@@ -115,8 +118,15 @@ function App() {
                       <Route path="/profile" element={<Profile />} />
                       <Route path="/settings" element={<Settings />} />
                       {user?.role === 'admin' && (
-                        <Route path="/admin" element={<Admin />} />
+                        <>
+                          <Route path="/admin" element={<AdminDashboard />} />
+                          <Route path="/admin/dashboard" element={<AdminDashboard />} />
+                          <Route path="/admin/content" element={<Admin />} />
+                          <Route path="/admin/test" element={<AdminTest />} />
+                        </>
                       )}
+                      <Route path="/admin/test" element={<AdminTest />} />
+                      <Route path="/admin/simple" element={<SimpleAdminTest />} />
                       <Route path="/" element={<Navigate to="/dashboard" />} />
                     </Routes>
                   </Layout>

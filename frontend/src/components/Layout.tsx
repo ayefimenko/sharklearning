@@ -39,7 +39,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   const settings = [
     { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
-    ...(user?.role === 'admin' ? [{ name: 'Admin Panel', href: '/admin', icon: CogIcon }] : []),
+    ...(user?.role === 'admin' ? [{ name: 'Admin Panel', href: '/admin/dashboard', icon: CogIcon }] : []),
   ];
 
   const handleLogout = () => {
